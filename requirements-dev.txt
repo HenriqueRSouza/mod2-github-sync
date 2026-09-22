@@ -1,0 +1,7 @@
+-r requirements.txt
+bandit==1.8.6
+coverage==7.10.7
+pip-audit==2.9.0
+pytest==8.4.2
+pytest-django==4.11.1
+ruff==0.13.1

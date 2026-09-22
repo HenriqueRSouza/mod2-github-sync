@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-github_sync}
+      POSTGRES_USER: ${POSTGRES_USER:-github_sync}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-github_sync}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-github_sync} -d ${POSTGRES_DB:-github_sync}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-github_sync}
+      POSTGRES_USER: ${POSTGRES_USER:-github_sync}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-github_sync}
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    command: sh -c "python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-github_sync}
+      POSTGRES_USER: ${POSTGRES_USER:-github_sync}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-github_sync}
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    command: celery -A config worker --loglevel=info
+    stop_grace_period: 15s
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
