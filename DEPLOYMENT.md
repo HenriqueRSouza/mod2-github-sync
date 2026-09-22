@@ -27,4 +27,7 @@ docker compose exec app python manage.py check --deploy
 docker compose logs -f app worker
 ```
 
+O PostgreSQL aplica usuario e senha somente na primeira criacao do volume. Se essas variaveis forem alteradas depois,
+atualize a credencial no banco ou recrie explicitamente o volume local quando nao houver dados a preservar.
+
 API e worker devem executar a mesma imagem. O encerramento gracioso do worker usa janela de quinze segundos definida no Compose.

@@ -56,6 +56,8 @@ services:
       POSTGRES_HOST: db
       REDIS_URL: redis://redis:6379/0
     command: celery -A config worker --loglevel=info
+    healthcheck:
+      disable: true
     stop_grace_period: 15s
     depends_on:
       db:
