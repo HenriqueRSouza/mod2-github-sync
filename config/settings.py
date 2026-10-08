@@ -21,6 +21,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -67,6 +68,8 @@ TIME_ZONE = "America/Sao_Paulo"
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {"staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"}}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
@@ -92,3 +95,5 @@ GITHUB_API_URL = os.getenv("GITHUB_API_URL", "https://api.github.com")
 GITHUB_CA_BUNDLE = os.getenv("GITHUB_CA_BUNDLE") or True
 GITHUB_HTTP_TIMEOUT = int(os.getenv("GITHUB_HTTP_TIMEOUT", "10"))
 IGNORE_BRANCHES = [value.strip() for value in os.getenv("IGNORE_BRANCHES", "tmp/*").split(",") if value.strip()]
+DELIVERY_SLA_HOURS = int(os.getenv("DELIVERY_SLA_HOURS", "72"))
+DASHBOARD_DEFAULT_REPOSITORY = os.getenv("DASHBOARD_DEFAULT_REPOSITORY", "HenriqueRSouza/mod2-github-sync")

@@ -3,14 +3,19 @@ import time
 import uuid
 
 import requests
+from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, connection, transaction
 from django.db.models import Count
+from django.http import Http404
+from django.shortcuts import render
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.generics import ListAPIView
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from .dashboard import dashboard_repository, dashboard_summary
 from .models import Commit, Repository, WebhookDelivery
 from .serializers import CommitSerializer
 from .services.crypto import decrypt_secret
@@ -119,3 +124,43 @@ def flow_metrics(request):
         queryset = queryset.filter(repository_id=repository_id)
     by_author = list(queryset.values("author__login").annotate(commits=Count("id")).order_by("-commits"))
     return Response({"total_commits": queryset.count(), "commits_by_author": by_author})
+
+
+def _dashboard_params(params):
+    days = params.get("days", "7")
+    repository_id = params.get("repository_id")
+    if days not in ("7", "30") or (repository_id is not None and not repository_id.isdecimal()):
+        raise ValueError("Selecione um período de 7 ou 30 dias e um repositório válido.")
+    return int(days), repository_id
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def dashboard_metrics(request):
+    try:
+        days, repository_id = _dashboard_params(request.query_params)
+        repository, _ = dashboard_repository(repository_id)
+    except (ValueError, Repository.DoesNotExist):
+        return Response({"detail": "Parâmetros inválidos."}, status=status.HTTP_400_BAD_REQUEST)
+    if repository is None:
+        return Response({"detail": "Nenhum repositório ativo cadastrado."}, status=status.HTTP_404_NOT_FOUND)
+    return Response(dashboard_summary(repository, days))
+
+
+@login_required(login_url="/admin/login/")
+def dashboard_page(request):
+    try:
+        days, repository_id = _dashboard_params(request.GET)
+        repository, repositories = dashboard_repository(repository_id)
+    except (ValueError, Repository.DoesNotExist) as exc:
+        raise Http404("Repositório ou período inválido.") from exc
+    return render(
+        request,
+        "github_sync/dashboard.html",
+        {
+            "summary": dashboard_summary(repository, days) if repository else None,
+            "repositories": repositories,
+            "selected_repository": repository,
+            "days": days,
+        },
+    )

@@ -22,6 +22,7 @@ jobs:
       - run: ruff check .
       - run: bandit -q -r apps -x apps/github_sync/tests
       - run: python manage.py makemigrations --check --dry-run
+      - run: python manage.py collectstatic --noinput
       - run: coverage run -m pytest
         env:
           CELERY_TASK_ALWAYS_EAGER: "true"

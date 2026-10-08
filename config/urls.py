@@ -2,10 +2,11 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
-from apps.github_sync.views import github_webhook
+from apps.github_sync.views import dashboard_page, github_webhook
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("dashboard/", dashboard_page, name="dashboard"),
     path("webhooks/github", github_webhook, name="github-webhook-unversioned"),
     path("api/v1/", include("apps.github_sync.urls")),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

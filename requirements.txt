@@ -6,3 +6,4 @@ drf-spectacular==0.28.0
 gunicorn==23.0.0
 psycopg[binary]==3.2.10
 requests==2.33.0
+whitenoise==6.11.0
