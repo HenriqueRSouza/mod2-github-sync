@@ -1,0 +1,99 @@
+{% load static %}
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visão de entregas</title>
+  <link rel="stylesheet" href="{% static 'github_sync/dashboard.css' %}">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="{% url 'dashboard' %}"><span class="brand-mark">↗</span> Fluxo <span class="brand-muted">/ Entregas</span></a>
+      <span class="topbar-label">PAINEL DE ATIVIDADE</span>
+    </header>
+
+    <main>
+      <div class="intro">
+        <div>
+          <p class="eyebrow">VISÃO GERAL</p>
+          <h1>O trabalho, em perspectiva.</h1>
+          <p class="subtitle">Acompanhe a atividade e o ritmo das entregas do repositório.</p>
+        </div>
+        <form class="filters" method="get" aria-label="Filtros do painel">
+          <label>Repositório
+            <select name="repository_id" onchange="this.form.submit()">
+              {% for repo in repositories %}
+                <option value="{{ repo.pk }}" {% if selected_repository.pk == repo.pk %}selected{% endif %}>{{ repo }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>Período
+            <select name="days" onchange="this.form.submit()">
+              <option value="7" {% if days == 7 %}selected{% endif %}>Últimos 7 dias</option>
+              <option value="30" {% if days == 30 %}selected{% endif %}>Últimos 30 dias</option>
+            </select>
+          </label>
+          <noscript><button type="submit">Aplicar filtros</button></noscript>
+        </form>
+      </div>
+
+      {% if summary %}
+        <div class="meta"><span class="live-dot"></span> {{ summary.repository.name }} <span class="separator">·</span>
+          {% if summary.last_processed_at %}Último evento processado em {{ summary.last_processed_at|date:"d/m/Y \à\s H:i" }}{% else %}Aguardando primeiro evento{% endif %}
+        </div>
+
+        <section class="numbers" aria-label="Indicadores de atividade">
+          <div class="number-card"><span class="card-label">COMMITS</span><strong>{{ summary.total_commits }}</strong><span class="card-note">registrados no período</span></div>
+          <div class="number-card"><span class="card-label">PUSHES</span><strong>{{ summary.total_pushes }}</strong><span class="card-note">eventos processados</span></div>
+          <div class="number-card"><span class="card-label">PRS CRIADOS</span><strong>{{ summary.prs_opened }}</strong><span class="card-note">abertos no período</span></div>
+          <div class="number-card"><span class="card-label">PRS CONCLUÍDOS</span><strong>{{ summary.prs_merged }}</strong><span class="card-note">mergeados no período</span></div>
+          <div class="number-card {% if summary.prs_overdue %}attention{% endif %}"><span class="card-label">FORA DO PRAZO</span><strong>{{ summary.prs_overdue }}</strong><span class="card-note">PRs abertos há mais de {{ summary.sla_hours|floatformat:0 }}h</span></div>
+        </section>
+
+        <div class="content-grid">
+          <section class="panel sla" aria-labelledby="sla-title">
+            <div class="panel-heading"><div><p class="eyebrow">PRAZO DE ENTREGA</p><h2 id="sla-title">SLA dos PRs</h2></div><span class="pill">Meta: {{ summary.sla_hours|floatformat:0 }}h</span></div>
+            <div class="sla-main">
+              <strong>{% if summary.sla_percent is not None %}{{ summary.sla_percent }}%{% else %}—{% endif %}</strong>
+              <span>dos PRs mergeados dentro do prazo</span>
+            </div>
+            <div class="progress" role="img" aria-label="SLA cumprido: {% if summary.sla_percent is not None %}{{ summary.sla_percent }}%{% else %}sem dados{% endif %}"><span style="width: {% if summary.sla_percent is not None %}{{ summary.sla_percent }}{% else %}0{% endif %}%"></span></div>
+            <div class="sla-foot"><span><b>{{ summary.sla_on_time }} de {{ summary.prs_merged }}</b> PRs no prazo</span><span>Mediana até o merge: <b>{% if summary.median_merge_hours is not None %}{{ summary.median_merge_hours }}h{% else %}—{% endif %}</b></span></div>
+            <p class="helper">Prazo contado da abertura ao merge. O percentual considera os PRs mergeados no período selecionado.</p>
+          </section>
+
+          <section class="panel health" aria-labelledby="health-title">
+            <div class="panel-heading"><div><p class="eyebrow">INTEGRAÇÃO</p><h2 id="health-title">Atualização dos dados</h2></div></div>
+            <div class="health-value">{% if summary.processing_within_2m_percent is not None %}{{ summary.processing_within_2m_percent }}%{% else %}—{% endif %}</div>
+            <p>dos eventos processados em até 2 minutos</p>
+            <div class="health-divider"></div>
+            <div class="health-row"><span>Eventos com falha no período</span><b>{{ summary.failed_deliveries }}</b></div>
+            <p class="helper">Mede o tempo entre o recebimento e o processamento do webhook.</p>
+          </section>
+        </div>
+
+        <section class="panel activity" aria-labelledby="activity-title">
+          <div class="panel-heading"><div><p class="eyebrow">ACOMPANHAMENTO</p><h2 id="activity-title">Atividade recente</h2></div><span class="muted">Até 10 eventos</span></div>
+          {% if summary.recent %}
+            <ul class="event-list">
+              {% for item in summary.recent %}
+                <li><span class="event-kind">{{ item.kind }}</span><div class="event-description">
+                  {% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }} <span aria-hidden="true">↗</span></a>{% else %}<strong>{{ item.title }}</strong>{% endif %}
+                  <small>{{ item.detail }}</small>
+                </div><time datetime="{{ item.at|date:'c' }}">{{ item.at|date:"d/m/Y H:i" }}</time></li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="empty"><span class="empty-icon">◇</span><h3>Nenhuma atividade neste período</h3><p>Os eventos de push, commits e PRs aparecerão aqui após serem recebidos do GitHub.</p></div>
+          {% endif %}
+        </section>
+      {% else %}
+        <section class="panel empty"><span class="empty-icon">◇</span><h2>Nenhum repositório cadastrado</h2><p>Cadastre um repositório e configure o webhook para começar a acompanhar as entregas.</p></section>
+      {% endif %}
+    </main>
+    <footer>Fluxo de entregas <span>·</span> Dados do GitHub</footer>
+  </div>
+</body>
+</html>

@@ -39,6 +39,35 @@ docker compose exec app python manage.py register_repository \
 
 Configure o webhook para apontar a uma URL publica terminada em `/webhooks/github`, selecione `application/json` e habilite inicialmente eventos de push e pull request.
 
+### Integracao de teste com mod2-github-sync
+
+Com Docker Desktop aberto e a conta `HenriqueRSouza` autenticada no GitHub CLI (`gh`), execute:
+
+```bash
+python3 scripts/setup_test_webhook.py
+```
+
+O comando sobe a aplicacao e um tunel HTTPS temporario, cadastra
+`HenriqueRSouza/mod2-github-sync`, configura seu webhook para `push` e `pull_request`
+e verifica uma entrega `ping` enviada pelo GitHub. O segredo permanece criptografado
+no banco. Apenas `/webhooks/github` aceita acesso pelo tunel; a API continua local.
+Para testar outro repositorio, informe `--repository dono/nome`.
+
+A URL do tunel pode mudar quando ele reiniciar. Execute novamente o comando para
+atualizar o webhook existente. Docker e o computador precisam permanecer ligados
+para receber eventos. Esta configuracao serve para testes, nao para hospedagem permanente.
+
+Consulte os dados no painel em `http://localhost:8000/dashboard/` apos criar um
+superusuario com `docker compose exec app python manage.py createsuperuser`.
+Selecione `HenriqueRSouza/mod2-github-sync` no filtro de repositorios.
+O webhook processa eventos recebidos; nao importa automaticamente o historico.
+
+Para parar todos os servicos, incluindo o tunel:
+
+```bash
+docker compose -f compose.yaml -f compose.webhook-test.yaml down
+```
+
 ## Desenvolvimento sem Docker
 
 O projeto requer Python 3.12+.
