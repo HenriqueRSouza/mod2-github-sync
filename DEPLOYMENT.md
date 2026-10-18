@@ -37,7 +37,8 @@ API e worker devem executar a mesma imagem. O encerramento gracioso do worker us
 Defina `GITHUB_REPOSITORIES` (ex.: `HenriqueRSouza/mod2-github-sync`, separados por virgula) e
 `GITHUB_WEBHOOK_SECRET`. A cada inicializacao o container consulta o GitHub e cadastra esses
 repositorios com o segredo informado, entao o cadastro sobrevive a bancos efemeros. Repositorios
-privados exigem tambem `GITHUB_TOKEN`.
+privados exigem tambem `GITHUB_TOKEN`. Na mesma etapa, os commits da branch padrao e os PRs dos
+ultimos `GITHUB_BACKFILL_DAYS` dias (padrao 30) sao importados da API do GitHub.
 
 No GitHub, crie o webhook do repositorio apontando para `https://<host>/webhooks/github`, com
 `application/json`, o mesmo segredo e os eventos `push` e `pull_request`.

@@ -3,6 +3,8 @@ from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
+from apps.github_sync.models import Repository
+from apps.github_sync.services.backfill import backfill_repository
 from apps.github_sync.services.github import GitHubClient
 
 
@@ -34,3 +36,11 @@ class Command(BaseCommand):
                 webhook_secret=settings.GITHUB_WEBHOOK_SECRET,
                 stdout=self.stdout,
             )
+            if settings.GITHUB_BACKFILL_DAYS > 0:
+                repository = Repository.objects.get(github_id=metadata["id"])
+                try:
+                    commits, pulls = backfill_repository(client, repository, settings.GITHUB_BACKFILL_DAYS)
+                except requests.RequestException as exc:
+                    self.stderr.write(f"Could not import history for {full_name}: {exc}")
+                    continue
+                self.stdout.write(f"Imported {commits} commits and {pulls} pull requests for {full_name}")

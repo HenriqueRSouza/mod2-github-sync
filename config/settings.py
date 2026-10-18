@@ -102,6 +102,8 @@ CELERY_TASK_EAGER_PROPAGATES = True
 GITHUB_REPOSITORIES = [value.strip() for value in os.getenv("GITHUB_REPOSITORIES", "").split(",") if value.strip()]
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+# Dias de historico (commits e PRs) importados do GitHub ao iniciar
+GITHUB_BACKFILL_DAYS = int(os.getenv("GITHUB_BACKFILL_DAYS", "30"))
 GITHUB_API_URL = os.getenv("GITHUB_API_URL", "https://api.github.com")
 GITHUB_CA_BUNDLE = os.getenv("GITHUB_CA_BUNDLE") or True
 GITHUB_HTTP_TIMEOUT = int(os.getenv("GITHUB_HTTP_TIMEOUT", "10"))

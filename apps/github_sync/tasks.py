@@ -53,10 +53,13 @@ def _process_push(delivery):
 
 
 def _process_pull_request(delivery):
-    item = delivery.payload["pull_request"]
+    save_pull_request(delivery.repository, delivery.payload["pull_request"])
+
+
+def save_pull_request(repository, item):
     author = _contributor(item.get("user") or {})
     PullRequest.objects.update_or_create(
-        repository=delivery.repository,
+        repository=repository,
         number=item["number"],
         defaults={
             "author": author,
