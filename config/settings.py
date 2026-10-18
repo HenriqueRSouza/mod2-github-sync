@@ -98,6 +98,10 @@ CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() == "true"
 CELERY_TASK_EAGER_PROPAGATES = True
 
+# Repositorios cadastrados a cada inicializacao (owner/name separados por virgula)
+GITHUB_REPOSITORIES = [value.strip() for value in os.getenv("GITHUB_REPOSITORIES", "").split(",") if value.strip()]
+GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 GITHUB_API_URL = os.getenv("GITHUB_API_URL", "https://api.github.com")
 GITHUB_CA_BUNDLE = os.getenv("GITHUB_CA_BUNDLE") or True
 GITHUB_HTTP_TIMEOUT = int(os.getenv("GITHUB_HTTP_TIMEOUT", "10"))

@@ -31,3 +31,13 @@ O PostgreSQL aplica usuario e senha somente na primeira criacao do volume. Se es
 atualize a credencial no banco ou recrie explicitamente o volume local quando nao houver dados a preservar.
 
 API e worker devem executar a mesma imagem. O encerramento gracioso do worker usa janela de quinze segundos definida no Compose.
+
+## Repositorios monitorados
+
+Defina `GITHUB_REPOSITORIES` (ex.: `HenriqueRSouza/mod2-github-sync`, separados por virgula) e
+`GITHUB_WEBHOOK_SECRET`. A cada inicializacao o container consulta o GitHub e cadastra esses
+repositorios com o segredo informado, entao o cadastro sobrevive a bancos efemeros. Repositorios
+privados exigem tambem `GITHUB_TOKEN`.
+
+No GitHub, crie o webhook do repositorio apontando para `https://<host>/webhooks/github`, com
+`application/json`, o mesmo segredo e os eventos `push` e `pull_request`.
