@@ -2,7 +2,6 @@ import uuid
 from datetime import timedelta
 
 import pytest
-from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
@@ -12,9 +11,9 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def signed_in_client(client):
-    user = get_user_model().objects.create_user(username="viewer", password="test-password")
-    client.force_login(user)
+def signed_in_client(client, settings):
+    settings.ACCESS_TOKEN = "test-token"
+    client.defaults["HTTP_AUTHORIZATION"] = "Bearer test-token"
     return client
 
 

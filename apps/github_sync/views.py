@@ -3,11 +3,13 @@ import time
 import uuid
 
 import requests
-from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, connection, transaction
 from django.db.models import Count
 from django.http import Http404
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_http_methods, require_POST
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -15,6 +17,7 @@ from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from .auth import SESSION_KEY, access_token_required, verify_access_token
 from .dashboard import dashboard_repository, dashboard_summary
 from .models import Commit, Repository, WebhookDelivery
 from .serializers import CommitSerializer
@@ -147,7 +150,7 @@ def dashboard_metrics(request):
     return Response(dashboard_summary(repository, days))
 
 
-@login_required(login_url="/admin/login/")
+@access_token_required
 def dashboard_page(request):
     try:
         days, repository_id = _dashboard_params(request.GET)
@@ -164,3 +167,27 @@ def dashboard_page(request):
             "days": days,
         },
     )
+
+
+@require_http_methods(["GET", "POST"])
+def login_page(request):
+    next_url = request.POST.get("next") or request.GET.get("next") or reverse("dashboard")
+    allowed_hosts = {request.get_host()}
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts=allowed_hosts, require_https=request.is_secure()):
+        next_url = reverse("dashboard")
+    # GET com ?access_token= permite que o microservico de login redirecione de volta com o token
+    token = request.POST.get("access_token") or request.GET.get("access_token")
+    error = None
+    if token:
+        if verify_access_token(token):
+            request.session.cycle_key()
+            request.session[SESSION_KEY] = token
+            return redirect(next_url)
+        error = "Token de acesso inválido."
+    return render(request, "github_sync/login.html", {"next": next_url, "error": error}, status=401 if error else 200)
+
+
+@require_POST
+def logout_page(request):
+    request.session.flush()
+    return redirect("login")

@@ -11,7 +11,10 @@
   <div class="shell">
     <header class="topbar">
       <a class="brand" href="{% url 'dashboard' %}"><span class="brand-mark">↗</span> Fluxo <span class="brand-muted">/ Entregas</span></a>
-      <span class="topbar-label">PAINEL DE ATIVIDADE</span>
+      <div class="topbar-actions">
+        <span class="topbar-label">PAINEL DE ATIVIDADE</span>
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="logout">Sair</button></form>
+      </div>
     </header>
 
     <main>
