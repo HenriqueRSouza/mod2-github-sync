@@ -7,6 +7,7 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture(autouse=True)
 def access_token(settings):
     settings.ACCESS_TOKEN = "test-token"
+    settings.AUTO_LOGIN = False
 
 
 def test_api_accepts_valid_bearer_token(client):
@@ -66,3 +67,15 @@ def test_empty_access_token_setting_denies_everything(client, settings):
     settings.ACCESS_TOKEN = ""
     assert client.get(reverse("dashboard-metrics"), HTTP_AUTHORIZATION="Bearer ").status_code == 401
     assert client.post(reverse("login"), {"access_token": "anything"}).status_code == 401
+
+
+def test_auto_login_opens_dashboard_without_token(client, settings):
+    settings.AUTO_LOGIN = True
+    response = client.get(reverse("dashboard"))
+    assert response.status_code == 200
+    assert "Sair" not in response.content.decode()
+
+
+def test_auto_login_keeps_api_protected(client, settings):
+    settings.AUTO_LOGIN = True
+    assert client.get(reverse("dashboard-metrics")).status_code == 401

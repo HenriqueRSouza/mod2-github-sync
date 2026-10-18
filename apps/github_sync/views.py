@@ -3,6 +3,7 @@ import time
 import uuid
 
 import requests
+from django.conf import settings
 from django.db import IntegrityError, connection, transaction
 from django.db.models import Count
 from django.http import Http404
@@ -165,6 +166,7 @@ def dashboard_page(request):
             "repositories": repositories,
             "selected_repository": repository,
             "days": days,
+            "auto_login": settings.AUTO_LOGIN,
         },
     )
 

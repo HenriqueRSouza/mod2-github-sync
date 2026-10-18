@@ -68,11 +68,16 @@ class AccessTokenScheme(OpenApiAuthenticationExtension):
 
 
 def access_token_required(view):
-    """Protege paginas HTML aceitando o token do header ou o salvo na sessao."""
+    """Protege paginas HTML aceitando o token do header ou o salvo na sessao.
+
+    Com AUTO_LOGIN ligado, entra sem token.
+    """
 
     @wraps(view)
     def wrapper(request, *args, **kwargs):
         user = verify_access_token(bearer_token(request) or request.session.get(SESSION_KEY, ""))
+        if user is None and settings.AUTO_LOGIN:
+            user = TokenUser(username="auto-login")
         if user is None:
             request.session.pop(SESSION_KEY, None)
             return redirect(f"{reverse('login')}?{urlencode({'next': request.get_full_path()})}")

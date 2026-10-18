@@ -22,7 +22,8 @@ def repository():
     return Repository.objects.create(github_id=100, owner="team", name="project", webhook_secret=b"encrypted")
 
 
-def test_dashboard_requires_login(client, repository):
+def test_dashboard_requires_login(client, repository, settings):
+    settings.AUTO_LOGIN = False
     assert client.get(reverse("dashboard")).status_code == 302
     assert client.get(reverse("dashboard-metrics")).status_code in (401, 403)
 

@@ -57,7 +57,8 @@ A URL do tunel pode mudar quando ele reiniciar. Execute novamente o comando para
 atualizar o webhook existente. Docker e o computador precisam permanecer ligados
 para receber eventos. Esta configuracao serve para testes, nao para hospedagem permanente.
 
-Consulte os dados no painel em `http://localhost:8000/dashboard/` informando o
+Consulte os dados no painel em `http://localhost:8000/dashboard/`. Com
+`AUTO_LOGIN=true` (padrao) o painel abre direto; com `AUTO_LOGIN=false` ele pede o
 token definido em `ACCESS_TOKEN`. A API aceita o mesmo token no header
 `Authorization: Bearer <token>`.
 Selecione `HenriqueRSouza/mod2-github-sync` no filtro de repositorios.

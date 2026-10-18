@@ -6,6 +6,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-development-key")
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN", "")
+# Entra no painel sem pedir token. Desligue quando o microservico de login estiver integrado.
+AUTO_LOGIN = os.getenv("AUTO_LOGIN", "true").lower() == "true"
 ALLOWED_HOSTS = [host for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host]
 
 INSTALLED_APPS = [

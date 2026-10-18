@@ -13,7 +13,9 @@
       <a class="brand" href="{% url 'dashboard' %}"><span class="brand-mark">↗</span> Fluxo <span class="brand-muted">/ Entregas</span></a>
       <div class="topbar-actions">
         <span class="topbar-label">PAINEL DE ATIVIDADE</span>
-        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="logout">Sair</button></form>
+        {% if not auto_login %}
+          <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="logout">Sair</button></form>
+        {% endif %}
       </div>
     </header>
 
