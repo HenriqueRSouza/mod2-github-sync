@@ -1,7 +1,7 @@
 Django==5.2.17
 celery[redis]==5.5.3
 cryptography==50.0.0
-djangorestframework==3.17.2
+djangorestframework==3.18.3
 drf-spectacular==0.28.0
 gunicorn==23.0.0
 psycopg[binary]==3.2.10
