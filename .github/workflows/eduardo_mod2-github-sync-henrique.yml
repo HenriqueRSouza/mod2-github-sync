@@ -1,12 +1,12 @@
-name: CI/CD Pipeline - Modulo 2 GitHub Sync
+name: CI/CD Pipeline - Modulo 2 GitHub Sync (Henrique)
 
 on:
   push:
     branches:
-      - 'main'
+      - 'eduardo'
   pull_request:
     branches:
-      - 'main'
+      - 'eduardo'
   workflow_dispatch:
 
 permissions:
@@ -62,9 +62,11 @@ jobs:
     name: 4. Publicacao Automatica (Azure)
     runs-on: ubuntu-latest
     needs: quality
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/eduardo' && github.event_name != 'pull_request'
+    environment:
+      name: 'Production'
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
     permissions:
-      id-token: write
       contents: read
 
     steps:
@@ -73,16 +75,10 @@ jobs:
         with:
           name: python-app
 
-      - name: Login to Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_8DBDBDB9A0224ADC985AC9873E71D262 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_480DF30E424148BD9D1D915CCF8E52B1 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_4B1F281B21EC400384C9CB910D07933F }}
-
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
           app-name: 'ai-platform-github-service-eduardo'
           slot-name: 'Production'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_EDUARDO }}
