@@ -5,26 +5,37 @@ import {
   Search,
   Download,
   UserCheck,
+  GitBranch,
+  GitPullRequest,
 } from 'lucide-react'
-import type { Commit, FlowMetrics, Repository } from '../../api'
+import type { Branch, Commit, FlowMetrics, PullRequest, Repository } from '../../api'
 
 interface SyncTabProps {
   repository: Repository | null
   commits: Commit[]
+  branches: Branch[]
+  pullRequests: PullRequest[]
   flow: FlowMetrics | null
   onSyncNow: () => void
   syncing: boolean
+  loading: boolean
+  error: string | null
 }
 
 export const SyncTab: React.FC<SyncTabProps> = ({
   repository,
   commits,
+  branches,
+  pullRequests,
   flow,
   onSyncNow,
   syncing,
+  loading,
+  error,
 }) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedFilter, setSelectedFilter] = useState('all')
+  const showIdeation = false
 
   const totalCommits = flow?.total_commits ?? commits.length
 
@@ -32,26 +43,15 @@ export const SyncTab: React.FC<SyncTabProps> = ({
     flow?.commits_by_author && flow.commits_by_author.length > 0
       ? flow.commits_by_author.map((item, idx) => ({
           id: String(idx + 1),
-          name: item.author__login || 'Eduardo F. de M.',
-          course: 'Engenharia de Software • Mackenzie',
-          ra: `GIT-${(item.author__login || 'MACK').toUpperCase().slice(0, 10)}`,
-          emails: [`${item.author__login || 'contribuinte'}@users.noreply.github.com`],
+          name: item.author__login || 'Autor não identificado',
+          course: 'Identidade GitHub indexada',
+          ra: item.author__login || 'não informado',
+          emails: [] as string[],
           commits: String(item.commits),
-          status: 'confirmado',
-          confidence: '100%',
+          status: 'indexado',
+          confidence: 'não calculada',
         }))
-      : [
-          {
-            id: '1',
-            name: 'Eduardo F. de M.',
-            course: 'Engenharia de Software • Mackenzie',
-            ra: 'GIT-EDUARDO',
-            emails: ['eduardo@mackenzista.com.br'],
-            commits: String(totalCommits || 21),
-            status: 'confirmado',
-            confidence: '100%',
-          },
-        ]
+      : []
 
 
   const filteredStudents = students.filter((s) => {
@@ -59,8 +59,19 @@ export const SyncTab: React.FC<SyncTabProps> = ({
       s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.ra.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.emails.some((e) => e.toLowerCase().includes(searchTerm.toLowerCase()))
-    return matches
+    return matches && (selectedFilter === 'all' || s.status === selectedFilter)
   })
+
+  const exportContributors = () => {
+    const content = JSON.stringify({ repository: repository?.full_name ?? null, contributors: filteredStudents }, null, 2)
+    const blob = new Blob([content], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'contribuintes-git-indexados.json'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="view-container">
@@ -69,23 +80,30 @@ export const SyncTab: React.FC<SyncTabProps> = ({
         <div>
           <h2 className="section-intro-title">Indexação e sincronização do repositório</h2>
           <p className="section-intro-desc">
-            Acompanhe a carga histórica, reduza leituras redundantes e consolide identidades Git para análises acadêmicas confiáveis.
+            Consulte branches, commits, pull requests e identidades Git persistidos pelo Módulo 2.
           </p>
         </div>
 
         <button
           onClick={onSyncNow}
-          disabled={syncing}
-          className="btn-nexus btn-nexus-primary"
+          disabled={syncing || !repository}
+          className="btn-module btn-module-primary"
         >
           <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
-          <span>Reconciliar Repositório (Compara commits locais + GitHub)</span>
+          <span>{repository ? 'Sincronizar dados do GitHub' : 'Conecte um repositório para sincronizar'}</span>
         </button>
       </div>
 
+      {loading && (
+        <div className="status-pill status-pill-info">Carregando dados indexados do repositório...</div>
+      )}
+      {error && (
+        <div className="status-pill status-pill-danger">{error}</div>
+      )}
+
       {/* 4 KPIs de Sincronização */}
       <div className="kpi-grid-4">
-        <div className="kpi-card">
+        {showIdeation && <div className="kpi-card">
           <div className="kpi-card-header">
             <span className="kpi-title">ESTADO DA INDEXAÇÃO</span>
             <span className={`badge ${commits.length > 0 ? 'badge-success' : 'badge-info'}`}>
@@ -96,53 +114,127 @@ export const SyncTab: React.FC<SyncTabProps> = ({
           <div className="kpi-sub">
             {commits.length > 0 ? 'base de commits sincronizada' : 'carga histórica em curso'}
           </div>
-        </div>
+        </div>}
 
         <div className="kpi-card">
           <div className="kpi-card-header">
             <span className="kpi-title">COMMITS INDEXADOS</span>
-            <span className="badge badge-success">No banco</span>
           </div>
           <div className="kpi-value">{totalCommits}</div>
-          <div className="kpi-sub">persistidos no PostgreSQL</div>
+          <div className="kpi-sub">persistidos no banco configurado</div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-card-header">
+            <span className="kpi-title">BRANCHES ATIVAS</span>
+            <GitBranch size={14} color="#60A5FA" />
+          </div>
+          <div className="kpi-value">{branches.length}</div>
+          <div className="kpi-sub">retornadas pela API</div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-card-header">
+            <span className="kpi-title">PULL REQUESTS</span>
+            <GitPullRequest size={14} color="#A78BFA" />
+          </div>
+          <div className="kpi-value">{pullRequests.length}</div>
+          <div className="kpi-sub">na página atual da API</div>
         </div>
 
         <div className="kpi-card">
           <div className="kpi-card-header">
             <span className="kpi-title">CONTRIBUIDORES REAIS</span>
-            <span className="badge badge-success">Mapeado</span>
           </div>
           <div className="kpi-value">{students.length}</div>
           <div className="kpi-sub">autores identificados no git</div>
         </div>
 
-        <div className="kpi-card">
+        {showIdeation && <div className="kpi-card">
           <div className="kpi-card-header">
             <span className="kpi-title">PENDÊNCIAS DE VÍNCULO</span>
             <span className="badge badge-success">OK</span>
           </div>
           <div className="kpi-value">0</div>
           <div className="kpi-sub">nenhuma pendência crítica</div>
+        </div>}
+      </div>
+
+      <div className="module-card">
+        <div className="module-card-header">
+          <div>
+            <div className="module-card-title">Estrutura indexada</div>
+            <div className="module-card-subtitle">
+              Dados reais dos endpoints de branches e pull requests do repositório selecionado.
+            </div>
+          </div>
+        </div>
+
+        <div className="responsive-grid-sync">
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
+              <GitBranch size={14} color="#60A5FA" />
+              <strong style={{ fontSize: 12 }}>Branches ativas</strong>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {branches.map((branch) => (
+                <div key={branch.id} className="code-box-dark" style={{ padding: '8px 10px' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{branch.name}</span>
+                  {branch.name === repository?.default_branch && (
+                    <span className="badge badge-info" style={{ float: 'right' }}>padrão</span>
+                  )}
+                </div>
+              ))}
+              {!loading && branches.length === 0 && (
+                <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>Nenhuma branch ativa foi retornada.</span>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
+              <GitPullRequest size={14} color="#A78BFA" />
+              <strong style={{ fontSize: 12 }}>Pull requests indexadas</strong>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {pullRequests.map((pullRequest) => (
+                <div key={pullRequest.id} className="code-box-dark" style={{ padding: '8px 10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-main)' }}>#{pullRequest.number} {pullRequest.title}</span>
+                    <span className={`badge ${pullRequest.merged_at ? 'badge-success' : pullRequest.state === 'open' ? 'badge-info' : 'badge-neutral'}`}>
+                      {pullRequest.merged_at ? 'mergeada' : pullRequest.state}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-tertiary)' }}>
+                    Autor: {pullRequest.author || 'não informado'} · atualizada em {new Date(pullRequest.updated_at).toLocaleString('pt-BR')}
+                  </div>
+                </div>
+              ))}
+              {!loading && pullRequests.length === 0 && (
+                <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>Nenhuma pull request foi retornada.</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Carga Inicial & Delta Sync Incremental */}
-      <div className="nexus-card">
-        <div className="nexus-card-header">
+      {showIdeation && <div className="module-card">
+        <div className="module-card-header">
           <div>
-            <div className="nexus-card-title">Carga inicial e estratégia incremental</div>
-            <div className="nexus-card-subtitle">
+            <div className="module-card-title">Carga inicial e estratégia incremental</div>
+            <div className="module-card-subtitle">
               Processamento retroativo com paginação resiliente e consultas delta após a conclusão.
             </div>
           </div>
           <span className="badge badge-success">● Worker indexer-07 saudável</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18 }}>
+        <div className="responsive-grid-auth">
           {/* Coluna Esquerda: Importação Histórica */}
           <div
             style={{
-              backgroundColor: '#0A0F1D',
+              backgroundColor: 'var(--bg-card-secondary)',
               border: '1px solid var(--border-default)',
               borderRadius: 8,
               padding: 16,
@@ -153,7 +245,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#FFFFFF' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>
                   Importação histórica de commits e PRs
                 </span>
                 <span className="badge badge-info">Em execução</span>
@@ -175,20 +267,20 @@ export const SyncTab: React.FC<SyncTabProps> = ({
             </div>
 
             {/* Grid de 4 Estatísticas de Carga */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, fontSize: 11 }}>
+            <div className="responsive-grid-four" style={{ fontSize: 11 }}>
               <div>
                 <span style={{ color: 'var(--text-dim)', display: 'block', fontSize: 10 }}>COMMITS PROCESSADOS</span>
-                <strong style={{ color: '#FFFFFF' }}>18.642 / 21.480</strong>
+                <strong style={{ color: 'var(--text-main)' }}>18.642 / 21.480</strong>
                 <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: 10 }}>86,8% indexados</span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-dim)', display: 'block', fontSize: 10 }}>PRS PROCESSADOS</span>
-                <strong style={{ color: '#FFFFFF' }}>1.126 / 1.584</strong>
+                <strong style={{ color: 'var(--text-main)' }}>1.126 / 1.584</strong>
                 <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: 10 }}>458 restantes</span>
               </div>
               <div>
                 <span style={{ color: 'var(--text-dim)', display: 'block', fontSize: 10 }}>PÁGINAS CONSUMIDAS</span>
-                <strong style={{ color: '#FFFFFF' }}>142 / 196</strong>
+                <strong style={{ color: 'var(--text-main)' }}>142 / 196</strong>
                 <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: 10 }}>100 itens por página</span>
               </div>
               <div>
@@ -207,7 +299,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
           {/* Coluna Direita: Sincronização Incremental (Delta Sync) */}
           <div
             style={{
-              backgroundColor: '#0A0F1D',
+              backgroundColor: 'var(--bg-card-secondary)',
               border: '1px solid var(--border-default)',
               borderRadius: 8,
               padding: 16,
@@ -219,7 +311,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
           >
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#FFFFFF' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>
                   Sincronização Incremental (Delta Sync)
                 </span>
                 <span className="badge badge-success">● Ativa</span>
@@ -230,7 +322,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
 
               <div
                 style={{
-                  backgroundColor: '#050811',
+                  backgroundColor: 'var(--bg-code)',
                   border: '1px solid var(--border-default)',
                   borderRadius: 6,
                   padding: '8px 10px',
@@ -240,7 +332,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                 }}
               >
                 <span style={{ color: 'var(--text-tertiary)', fontSize: 10, display: 'block' }}>since:</span>
-                <strong style={{ color: '#93C5FD' }}>2026-10-02T14:27:31-03:00</strong>
+                <strong style={{ color: 'var(--info)' }}>2026-10-02T14:27:31-03:00</strong>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12, fontSize: 11 }}>
@@ -269,24 +361,23 @@ export const SyncTab: React.FC<SyncTabProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Tabela: Vínculo de Contribuintes */}
-      <div className="nexus-card">
-        <div className="nexus-card-header">
+      <div className="module-card">
+        <div className="module-card-header">
           <div>
-            <div className="nexus-card-title">Vínculo de Contribuintes</div>
-            <div className="nexus-card-subtitle">
+            <div className="module-card-title">Vínculo de Contribuintes</div>
+            <div className="module-card-subtitle">
               Consolide múltiplos e-mails Git em um único perfil de estudante para manter as métricas acadêmicas corretas.
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className="badge badge-success">● 177 confirmados</span>
-            <span className="badge badge-warning">● 7 requerem revisão</span>
-            <button className="btn-nexus btn-nexus-secondary btn-nexus-sm">
+            <span className="badge badge-success">● {students.length} identidades Git</span>
+            <button onClick={exportContributors} className="btn-module btn-module-secondary btn-module-sm">
               <Download size={12} />
-              <span>Exportar vínculos</span>
+              <span>Exportar contribuintes</span>
             </button>
           </div>
         </div>
@@ -308,23 +399,18 @@ export const SyncTab: React.FC<SyncTabProps> = ({
               value={selectedFilter}
               onChange={(e) => setSelectedFilter(e.target.value)}
             >
-              <option value="all">Todos os vínculos</option>
-              <option value="confirmado">Confirmados</option>
-              <option value="revisao">Revisão pendente</option>
+              <option value="all">Todas as identidades</option>
+              <option value="indexado">Identidades indexadas</option>
             </select>
 
-            <div className="select-chip">
-              <span>Turma 2026.2</span>
-            </div>
-
             <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 8 }}>
-              184 estudantes • 327 identidades Git consolidadas
+              {filteredStudents.length} identidade(s) exibida(s) • vínculo acadêmico depende do Módulo 1
             </span>
           </div>
         </div>
 
         <div className="table-responsive">
-          <table className="nexus-table">
+          <table className="module-table">
             <thead>
               <tr>
                 <th>ESTUDANTE</th>
@@ -340,7 +426,7 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                 <tr key={item.id}>
                   <td>
                     <div>
-                      <strong style={{ color: '#FFFFFF', display: 'block' }}>{item.name}</strong>
+                      <strong style={{ color: 'var(--text-main)', display: 'block' }}>{item.name}</strong>
                       <span style={{ color: 'var(--text-tertiary)', fontSize: 10.5 }}>{item.course}</span>
                     </div>
                   </td>
@@ -349,13 +435,14 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                   </td>
                   <td>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {item.emails.length === 0 && <span style={{ color: 'var(--text-dim)', fontSize: 10.5 }}>Não exposto pela API</span>}
                       {item.emails.map((email, idx) => (
                         <span
                           key={idx}
                           style={{
                             fontFamily: 'var(--font-mono)',
                             fontSize: 10.5,
-                            color: idx === 0 ? '#93C5FD' : 'var(--text-dim)',
+                            color: idx === 0 ? 'var(--info)' : 'var(--text-dim)',
                           }}
                         >
                           {email}
@@ -364,17 +451,17 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     </div>
                   </td>
                   <td>
-                    <strong style={{ color: '#FFFFFF', fontFamily: 'var(--font-mono)' }}>{item.commits}</strong>
+                    <strong style={{ color: 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>{item.commits}</strong>
                     <span style={{ color: 'var(--text-tertiary)', fontSize: 10, display: 'block' }}>
                       commits vinculados
                     </span>
                   </td>
                   <td>
-                    {item.status === 'confirmado' && (
+                    {item.status === 'indexado' && (
                       <div>
-                        <span className="badge badge-success">● Vínculo confirmado</span>
+                        <span className="badge badge-info">● Identidade Git indexada</span>
                         <span style={{ color: 'var(--text-tertiary)', fontSize: 10, display: 'block', marginTop: 2 }}>
-                          Confiança do vínculo: {item.confidence}
+                          Vínculo acadêmico: não realizado
                         </span>
                       </div>
                     )}
@@ -396,20 +483,27 @@ export const SyncTab: React.FC<SyncTabProps> = ({
                     )}
                   </td>
                   <td style={{ textAlign: 'right' }}>
-                    {item.status === 'confirmado' ? (
-                      <button className="btn-nexus btn-nexus-secondary btn-nexus-sm">
+                    {item.status === 'indexado' ? (
+                      <button className="btn-module btn-module-secondary btn-module-sm" disabled title="A revisão manual de vínculos ainda não possui endpoint.">
                         <Users size={11} />
-                        <span>Revisar</span>
+                        <span>Aguardando integração M1</span>
                       </button>
                     ) : (
-                      <button className="btn-nexus btn-nexus-primary btn-nexus-sm">
+                      <button className="btn-module btn-module-primary btn-module-sm" disabled title="A resolução de vínculos ainda não possui endpoint.">
                         <UserCheck size={11} />
-                        <span>Resolver</span>
+                        <span>Resolução em desenvolvimento</span>
                       </button>
                     )}
                   </td>
                 </tr>
               ))}
+              {!loading && filteredStudents.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 28 }}>
+                    Nenhuma identidade Git corresponde aos filtros atuais.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -23,8 +23,12 @@ def repository():
     return Repository.objects.create(github_id=100, owner="team", name="project", webhook_secret=b"encrypted")
 
 
-def test_dashboard_metrics_requires_login(client, repository):
-    assert client.get(reverse("dashboard-metrics")).status_code in (401, 403)
+def test_dashboard_metrics_requires_login(client, repository, settings):
+    settings.MODULE1_AUTH_REQUIRED = True
+    response = client.get(reverse("dashboard-metrics"))
+
+    assert response.status_code in (401, 403)
+    assert response.json()["code"] in ("not_authenticated", "permission_denied")
 
 
 def test_dashboard_aggregates_distinct_events_and_sla(signed_in_client, repository):

@@ -1,18 +1,57 @@
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { X, AlertCircle, CheckCircle2, KeyRound } from 'lucide-react'
 import { api, type Repository } from '../api'
 
 interface ConnectRepoModalProps {
   isOpen: boolean
+  projectId: string | null
   onClose: () => void
-  onSuccess: (repo: Repository) => void
+  onSuccess: (repo: Repository, token?: string) => void
 }
 
-export const ConnectRepoModal: React.FC<ConnectRepoModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const ConnectRepoModal: React.FC<ConnectRepoModalProps> = ({ isOpen, projectId, onClose, onSuccess }) => {
   const [url, setUrl] = useState('')
   const [token, setToken] = useState('')
+  const [webhookSecret, setWebhookSecret] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  const resetAndClose = useCallback(() => {
+    setUrl('')
+    setToken('')
+    setWebhookSecret('')
+    setError(null)
+    setLoading(false)
+    onClose()
+  }, [onClose])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const previousFocus = document.activeElement as HTMLElement | null
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !loading) resetAndClose()
+      if (event.key !== 'Tab' || !dialogRef.current) return
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocus?.focus()
+    }
+  }, [isOpen, loading, resetAndClose])
 
   if (!isOpen) return null
 
@@ -40,8 +79,18 @@ export const ConnectRepoModal: React.FC<ConnectRepoModalProps> = ({ isOpen, onCl
       return
     }
 
+    if (!projectId) {
+      setError('Selecione ou crie um projeto antes de conectar o repositório.')
+      return
+    }
+
     if (!isValidGitHubUrl(cleanUrl)) {
       setError('A URL informada deve pertencer obrigatoriamente ao domínio github.com (ex: https://github.com/owner/repo).')
+      return
+    }
+
+    if (webhookSecret.trim().length < 16) {
+      setError('Informe um segredo de webhook com pelo menos 16 caracteres.')
       return
     }
 
@@ -50,16 +99,29 @@ export const ConnectRepoModal: React.FC<ConnectRepoModalProps> = ({ isOpen, onCl
 
     try {
       const { status, data } = await api.createRepository({
+        project_id: projectId,
         url: cleanUrl,
         token: token.trim() || undefined,
+        webhook_secret: webhookSecret.trim(),
       })
 
       if (status === 201) {
-        onSuccess(data)
-        onClose()
+        onSuccess(data, token.trim() || undefined)
+        resetAndClose()
       } else {
-        const detail = (data as any)?.detail || (data as any)?.url || 'Falha ao conectar o repositório.'
-        setError(Array.isArray(detail) ? detail.join(' ') : String(detail))
+        const response = data as { code?: string; detail?: string; url?: string | string[] }
+        const detail = response.detail || response.url || 'Falha ao conectar o repositório.'
+        if (status === 429 || response.code === 'github_rate_limit_exceeded') {
+          setError('O limite de consultas públicas do GitHub foi atingido. Informe um PAT com acesso ao repositório ou tente novamente mais tarde.')
+        } else if (status === 403 && !token.trim()) {
+          setError('O GitHub recusou o acesso. Se o repositório for privado ou o limite público tiver sido atingido, informe um PAT com acesso de leitura.')
+        } else if (status === 500) {
+          setError('A integração do Módulo 2 apresentou uma falha interna ao processar o repositório. A URL e o PAT não são expostos; tente novamente e, se persistir, reporte o horário do erro para verificarmos os logs do serviço.')
+        } else if (status >= 500 || (typeof detail === 'string' && detail.trim().startsWith('<'))) {
+          setError('O serviço de integração está temporariamente indisponível. Tente novamente em alguns instantes; se persistir, a equipe deve verificar as variáveis seguras do backend.')
+        } else {
+          setError(Array.isArray(detail) ? detail.join(' ') : String(detail))
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Erro de rede ao conectar repositório.')
@@ -69,8 +131,15 @@ export const ConnectRepoModal: React.FC<ConnectRepoModalProps> = ({ isOpen, onCl
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={() => { if (!loading) resetAndClose() }}>
+      <div
+        ref={dialogRef}
+        className="modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="connect-repository-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
@@ -78,12 +147,12 @@ export const ConnectRepoModal: React.FC<ConnectRepoModalProps> = ({ isOpen, onCl
                 width: 32,
                 height: 32,
                 borderRadius: 8,
-                backgroundColor: 'rgba(37, 99, 235, 0.15)',
-                border: '1px solid rgba(37, 99, 235, 0.3)',
+                backgroundColor: 'var(--primary-subtle)',
+                border: '1px solid var(--primary-border)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#60A5FA',
+                color: 'var(--primary)',
               }}
             >
               {/* GitHub SVG Icon */}
@@ -92,14 +161,15 @@ export const ConnectRepoModal: React.FC<ConnectRepoModalProps> = ({ isOpen, onCl
               </svg>
             </div>
             <div>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#FFFFFF' }}>Conectar Repositório GitHub</h3>
+              <h3 id="connect-repository-title" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-main)' }}>Conectar Repositório GitHub</h3>
               <p style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
                 Cole o link direto do repositório no GitHub para ingestão e rastreabilidade.
               </p>
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={resetAndClose}
+            aria-label="Fechar conexão de repositório"
             style={{
               background: 'transparent',
               border: 'none',
@@ -119,7 +189,7 @@ export const ConnectRepoModal: React.FC<ConnectRepoModalProps> = ({ isOpen, onCl
               borderRadius: 6,
               backgroundColor: 'var(--danger-subtle)',
               border: '1px solid var(--danger-border)',
-              color: '#F87171',
+              color: 'var(--danger)',
               fontSize: 12,
               display: 'flex',
               alignItems: 'center',
@@ -137,7 +207,7 @@ export const ConnectRepoModal: React.FC<ConnectRepoModalProps> = ({ isOpen, onCl
             <input
               type="url"
               className="form-input"
-              placeholder="https://github.com/EduardoFdeM/ai-platform-github-service"
+              placeholder="https://github.com/organizacao/repositorio"
               value={url}
               onChange={(e) => {
                 setUrl(e.target.value)
@@ -147,18 +217,41 @@ export const ConnectRepoModal: React.FC<ConnectRepoModalProps> = ({ isOpen, onCl
               autoFocus
             />
             {isInvalidUrl ? (
-              <span style={{ fontSize: 11, color: '#EF4444', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                 <AlertCircle size={12} /> Apenas links válidos do github.com são aceitos.
               </span>
             ) : url.trim().length > 0 ? (
-              <span style={{ fontSize: 11, color: '#10B981', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                <CheckCircle2 size={12} /> Link do GitHub verificado.
+              <span style={{ fontSize: 11, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                <CheckCircle2 size={12} /> Formato válido. O acesso será confirmado ao conectar.
               </span>
             ) : (
               <span className="form-help">
                 Exemplo: https://github.com/facebook/react ou https://github.com/owner/repository
               </span>
             )}
+          </div>
+
+          <div>
+            <label className="form-label">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <KeyRound size={12} /> Segredo do webhook
+              </span>
+            </label>
+            <input
+              type="password"
+              className="form-input"
+              placeholder="Use um segredo forte e exclusivo deste repositório"
+              value={webhookSecret}
+              onChange={(e) => {
+                setWebhookSecret(e.target.value)
+                setError(null)
+              }}
+              minLength={16}
+              required
+            />
+            <span className="form-help">
+              Protege os eventos recebidos: o GitHub assina cada payload e o Módulo 2 valida a assinatura antes de indexar commits. Configure o mesmo valor no webhook do GitHub; ele será cifrado no servidor e não será devolvido pela API.
+            </span>
           </div>
 
           <div>
@@ -175,23 +268,23 @@ export const ConnectRepoModal: React.FC<ConnectRepoModalProps> = ({ isOpen, onCl
               onChange={(e) => setToken(e.target.value)}
             />
             <span className="form-help">
-              Necessário apenas se o repositório for privado ou para evitar rate limit de 60 req/h.
+              Use para repositórios privados ou quando o limite público do GitHub for atingido. O token não é exibido nem devolvido pela API.
             </span>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
             <button
               type="button"
-              onClick={onClose}
+              onClick={resetAndClose}
               disabled={loading}
-              className="btn-nexus btn-nexus-secondary"
+              className="btn-module btn-module-secondary"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={loading || isInvalidUrl || !url.trim()}
-              className="btn-nexus btn-nexus-primary"
+              disabled={loading || !projectId || isInvalidUrl || !url.trim() || webhookSecret.trim().length < 16}
+              className="btn-module btn-module-primary"
             >
               {loading ? 'Conectando & Sincronizando...' : 'Conectar Repositório'}
             </button>

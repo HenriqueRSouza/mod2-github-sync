@@ -17,7 +17,7 @@ export const PipelineStepper: React.FC<PipelineStepperProps> = ({
   return (
     <div
       style={{
-        backgroundColor: '#0A0F1D',
+        backgroundColor: 'var(--bg-card-secondary)',
         border: '1px solid var(--border-default)',
         borderRadius: 8,
         padding: 16,
@@ -28,7 +28,7 @@ export const PipelineStepper: React.FC<PipelineStepperProps> = ({
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>
             Pipeline • {pipelineId}
           </span>
           <span className="badge badge-success">{status}</span>

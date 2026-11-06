@@ -1,7 +1,27 @@
 from django.contrib import admin
 
-from .models import Branch, Commit, CommitFile, Contributor, ContributorEmail, PullRequest, Repository, WebhookDelivery
+from .models import (
+    Branch,
+    Commit,
+    CommitFile,
+    Contributor,
+    ContributorEmail,
+    CredentialAuditEvent,
+    PullRequest,
+    Repository,
+    WebhookDelivery,
+)
 
 admin.site.register(
-    (Repository, Contributor, ContributorEmail, Branch, Commit, CommitFile, PullRequest, WebhookDelivery)
+    (
+        Repository,
+        Contributor,
+        ContributorEmail,
+        Branch,
+        Commit,
+        CommitFile,
+        PullRequest,
+        WebhookDelivery,
+        CredentialAuditEvent,
+    )
 )

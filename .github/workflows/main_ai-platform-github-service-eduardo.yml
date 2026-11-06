@@ -1,0 +1,137 @@
+name: CI/CD Pipeline - Modulo 2 GitHub Sync
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+    branches:
+      - 'main'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: 1. Linting, 2. Testes e 3. Dependencias
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Set up Node.js version
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias completas
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: 1. Linting (Ruff)
+        run: ruff check .
+
+      - name: 1.1. Frontend lint e build
+        run: |
+          npm ci --prefix frontend
+          npm run lint --prefix frontend
+          npm run test --prefix frontend
+          npm run build --prefix frontend
+
+      - name: 2. Testes Automaticos (Pytest com Coverage)
+        run: coverage run -m pytest
+        env:
+          CELERY_TASK_ALWAYS_EAGER: "true"
+          CREDENTIAL_MASTER_KEY: "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
+
+      - name: Validar contrato OpenAPI
+        run: python manage.py spectacular --validate --fail-on-warn --file /tmp/openapi.yaml
+
+      - name: Validar migracoes versionadas
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Relatorio de Cobertura
+        run: coverage report --fail-under=80
+
+      - name: Analise estatica de seguranca (Bandit)
+        run: bandit -q -r apps -x apps/github_sync/tests
+
+      - name: 3. Verificacao de Vulnerabilidades (Pip-Audit)
+        run: pip-audit -r requirements.txt
+
+      - name: Upload artifact for deployment jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-app
+          path: |
+            .
+            !antenv/
+            !.git/
+            !.github/
+
+  deploy:
+    name: 4. Publicacao Automatica (Azure)
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: python-app
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_8DBDBDB9A0224ADC985AC9873E71D262 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_480DF30E424148BD9D1D915CCF8E52B1 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_4B1F281B21EC400384C9CB910D07933F }}
+
+      - name: 'Deploy to Azure Web App'
+        uses: azure/webapps-deploy@v3
+        id: deploy-to-webapp
+        with:
+          app-name: 'ai-platform-github-service-eduardo'
+          slot-name: 'Production'
+
+      - name: Configurar inicialização e migrations
+        run: |
+          WEBAPP_ID=$(az resource list \
+            --name 'ai-platform-github-service-eduardo' \
+            --resource-type 'Microsoft.Web/sites' \
+            --query '[0].id' \
+            --output tsv)
+          if [ -z "$WEBAPP_ID" ]; then
+            echo "::error::Aplicação Azure ai-platform-github-service-eduardo não encontrada na assinatura autenticada."
+            exit 1
+          fi
+          az webapp config set --ids "$WEBAPP_ID" --startup-file 'bash startup.sh'
+
+      - name: Smoke test do health publicado
+        run: |
+          curl --fail --show-error --silent \
+            --retry 12 --retry-delay 10 --retry-all-errors \
+            '${{ steps.deploy-to-webapp.outputs.webapp-url }}/api/v1/health'
+
+      - name: Smoke test do contrato publicado
+        run: |
+          curl --fail --show-error --silent \
+            --retry 3 --retry-delay 5 --retry-all-errors \
+            '${{ steps.deploy-to-webapp.outputs.webapp-url }}/api/schema/?format=json' \
+            --output /dev/null

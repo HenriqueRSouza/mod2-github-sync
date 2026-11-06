@@ -41,6 +41,10 @@ def test_valid_token_returns_identity_and_scopes_without_echoing_token(client, m
         "name": "Aluno Mackenzie",
         "avatar_url": "https://avatars.example/1",
         "scopes": ["read:org", "repo"],
+        "required_scopes": [],
+        "missing_scopes": [],
+        "excess_scopes": [],
+        "least_privilege": True,
     }
     assert "ghp_secret-token" not in response.content.decode()
 
@@ -68,3 +72,19 @@ def test_github_unreachable_returns_503(client, monkeypatch):
 
     assert response.status_code == 503
     assert response.json()["valid"] is False
+
+
+def test_handshake_rejects_token_missing_environment_scope(client, monkeypatch, settings):
+    settings.GITHUB_REQUIRED_SCOPES = {"repo", "read:org"}
+    settings.GITHUB_ALLOWED_SCOPES = {"repo", "read:org"}
+    monkeypatch.setattr(
+        requests.Session,
+        "get",
+        Mock(return_value=github_response(200, {"login": "student"}, {"X-OAuth-Scopes": "read:org"})),
+    )
+
+    response = client.post(reverse("github-handshake"), {"token": "limited"}, content_type="application/json")
+
+    assert response.status_code == 403
+    assert response.json()["valid"] is False
+    assert response.json()["missing_scopes"] == ["repo"]

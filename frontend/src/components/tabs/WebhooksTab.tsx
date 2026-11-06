@@ -1,8 +1,7 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Radio,
   CheckCircle2,
-  Activity,
   Play,
   Pause,
   Download,
@@ -13,9 +12,8 @@ import {
   ExternalLink,
   ShieldCheck,
   Check,
-  Clock,
 } from 'lucide-react'
-import { api, type Delivery, type Repository } from '../../api'
+import { api, apiOrigin, type Delivery, type Repository } from '../../api'
 
 interface WebhooksTabProps {
   repository: Repository | null
@@ -27,11 +25,42 @@ interface WebhookEventItem {
   id: string
   event: string
   deliveryId: string
-  author: string
+  author: string | null
   timestamp: string
-  forcePush: boolean
+  forcePush: boolean | null
   status: string
   branch: string
+  attempts?: number
+  error?: string | null
+  receivedAt?: string
+  processedAt?: string | null
+  commitsCount?: number
+  isDemo?: boolean
+}
+
+const deliveryStatusLabel = (status: string) => {
+  const labels: Record<string, string> = {
+    pending: 'Pendente',
+    processing: 'Processando',
+    processed: 'Processado',
+    failed: 'Falhou',
+  }
+  return labels[status] || status
+}
+
+const deliveryStatusBadge = (status: string) => {
+  if (status === 'processed' || status === '202 Accepted') return 'badge-success'
+  if (status === 'failed') return 'badge-danger'
+  if (status === 'processing') return 'badge-info'
+  return 'badge-warning'
+}
+
+const deliveryStatusDescription = (event: WebhookEventItem) => {
+  if (event.isDemo) return 'Registro demonstrativo da ideação; não representa uma entrega processada.'
+  if (event.status === 'processed') return 'A entrega foi processada pelo módulo e possui estado final persistido.'
+  if (event.status === 'failed') return event.error || 'A entrega falhou sem detalhe adicional exposto pela API.'
+  if (event.status === 'processing') return 'A entrega foi aceita e está sendo processada.'
+  return 'A entrega foi aceita e aguarda processamento.'
 }
 
 // Utilitário para calcular HMAC-SHA256 no browser
@@ -70,8 +99,17 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
   const [simBranch, setSimBranch] = useState('main')
   const [simMessage, setSimMessage] = useState('feat(ui): sincronizar eventos em tempo real no dashboard')
   const [simFile, setSimFile] = useState('frontend/src/App.tsx')
+  const [simSecret, setSimSecret] = useState('')
   const [simStatus, setSimStatus] = useState<string | null>(null)
   const [simulating, setSimulating] = useState(false)
+  const hasLiveDeliveries = deliveries.length > 0
+  const showOperationalIdeation = false
+
+  useEffect(() => {
+    if (!streamActive || !repository || !onRefreshData) return
+    const polling = window.setInterval(onRefreshData, 5000)
+    return () => window.clearInterval(polling)
+  }, [streamActive, repository, onRefreshData])
 
   // Eventos do Figma
   const defaultEvents: WebhookEventItem[] = [
@@ -147,14 +185,15 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
     },
   ]
 
-  // Mesclando com entregas reais salvas no banco
+  // Entregas persistidas têm prioridade. A amostra do Figma só aparece quando
+  // a flag explícita de ideação está habilitada.
   const displayEvents: WebhookEventItem[] =
     deliveries.length > 0
       ? deliveries.map((d) => ({
           id: d.delivery_id,
           event: d.event,
           deliveryId: d.delivery_id,
-          author: 'EduardoFdeM',
+          author: null,
           timestamp: new Date(d.received_at).toLocaleString('pt-BR', {
             day: '2-digit',
             month: 'short',
@@ -162,19 +201,27 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
             hour: '2-digit',
             minute: '2-digit',
           }),
-          forcePush: false,
-          status: d.status === 'processed' ? '202 Accepted' : d.status,
-          branch: d.ref ? d.ref.replace('refs/heads/', '') : 'main',
+          forcePush: null,
+          status: d.status,
+          branch: d.ref ? d.ref.replace('refs/heads/', '') : 'Não informado',
+          attempts: d.attempts,
+          error: d.error || null,
+          receivedAt: d.received_at,
+          processedAt: d.processed_at,
+          commitsCount: d.commits_count,
         }))
-      : defaultEvents
+      : showOperationalIdeation
+        ? defaultEvents.map((event) => ({ ...event, isDemo: true }))
+        : []
 
   const filteredEvents = displayEvents.filter((item) => {
     const matchesSearch =
       item.deliveryId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.author || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.event.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesEvent = selectedEventType === 'all' || item.event === selectedEventType
-    return matchesSearch && matchesEvent
+    const matchesStatus = selectedStatus === 'all' || item.status === selectedStatus
+    return matchesSearch && matchesEvent && matchesStatus
   })
 
   const openDrawer = (item: WebhookEventItem) => {
@@ -185,7 +232,10 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
   // Disparo simulado com cálculo HMAC-SHA256 no browser
   const handleSimulateWebhook = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!repository) return
+    if (!repository || simSecret.trim().length < 16) {
+      setSimStatus('Informe o segredo configurado para este repositório (mínimo de 16 caracteres).')
+      return
+    }
     setSimulating(true)
     setSimStatus('Calculando digest HMAC-SHA256 e enviando payload...')
 
@@ -223,8 +273,7 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
       }
 
       const bodyStr = JSON.stringify(payload)
-      const secret = 'mackenzie-secret-2026'
-      const signatureHex = await computeHmacSha256(secret, bodyStr)
+      const signatureHex = await computeHmacSha256(simSecret.trim(), bodyStr)
 
       const { status, data } = await api.sendWebhook(bodyStr, {
         'X-Hub-Signature-256': `sha256=${signatureHex}`,
@@ -244,6 +293,7 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
       setSimStatus(`Erro no envio: ${err.message}`)
     } finally {
       setSimulating(false)
+      setSimSecret('')
     }
   }
 
@@ -252,33 +302,35 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
       {/* Sub-header da Tela 09 */}
       <div className="section-intro-bar">
         <div>
-          <h2 className="section-intro-title">Eventos em tempo real</h2>
+          <h2 className="section-intro-title">Entregas de webhook</h2>
           <p className="section-intro-desc">
             Recepção segura, enfileiramento assíncrono e rastreabilidade dos eventos enviados pelo GitHub.
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div className="status-pill status-pill-success">
-            <Radio size={12} className={streamActive ? 'animate-pulse' : ''} />
-            <span>CANAL DE EVENTOS AO VIVO • 87 ms</span>
-            <strong>● Operacional</strong>
+          <div className={`status-pill ${hasLiveDeliveries ? 'status-pill-success' : 'status-pill-info'}`}>
+            <Radio size={12} className={hasLiveDeliveries && streamActive ? 'animate-pulse' : ''} />
+            <span>{streamActive ? 'ATUALIZAÇÃO AUTOMÁTICA A CADA 5S' : 'ATUALIZAÇÃO AUTOMÁTICA PAUSADA'}</span>
+            <strong>{hasLiveDeliveries ? '● Entregas persistidas disponíveis' : 'Sem entregas persistidas'}</strong>
           </div>
 
           <button
             onClick={() => setStreamActive(!streamActive)}
-            className="btn-nexus btn-nexus-secondary btn-nexus-sm"
+            className="btn-module btn-module-secondary btn-module-sm"
           >
             {streamActive ? <Pause size={12} /> : <Play size={12} />}
-            <span>{streamActive ? 'Pausar stream' : 'Retomar stream'}</span>
+            <span>{streamActive ? 'Pausar atualização' : 'Retomar atualização'}</span>
           </button>
 
           <button
             onClick={() => setShowSimulator(!showSimulator)}
-            className="btn-nexus btn-nexus-primary btn-nexus-sm"
+            disabled={!repository}
+            className="btn-module btn-module-primary btn-module-sm"
+            title={repository ? 'Enviar um payload técnico assinado para validar o recebimento' : 'Selecione um repositório para testar o webhook'}
           >
             <Send size={12} />
-            <span>Simulador de Webhook</span>
+            <span>{repository ? 'Testar recebimento' : 'Selecione um repositório'}</span>
           </button>
         </div>
       </div>
@@ -286,7 +338,7 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
       {/* Card Verde: Saúde do Webhook */}
       <div
         style={{
-          backgroundColor: '#0D1322',
+          backgroundColor: 'var(--bg-card)',
           border: '1px solid var(--border-default)',
           borderRadius: 8,
           padding: '14px 18px',
@@ -315,8 +367,10 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#FFFFFF' }}>Saúde do webhook</span>
-              <span className="badge badge-success">● Recebendo eventos</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>Saúde do webhook</span>
+              <span className={`badge ${hasLiveDeliveries ? 'badge-success' : 'badge-info'}`}>
+                {hasLiveDeliveries ? '● Entregas persistidas' : 'Prévia sem entregas'}
+              </span>
             </div>
             <div
               style={{
@@ -326,7 +380,7 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
                 marginTop: 2,
               }}
             >
-              https://api.plataforma.com/webhooks/github
+              {apiOrigin}/webhooks/github
             </div>
           </div>
         </div>
@@ -335,34 +389,39 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
           <div>
             <span style={{ color: 'var(--text-dim)', display: 'block', fontSize: 10 }}>ASSINATURA</span>
             <strong style={{ color: '#34D399', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Check size={12} /> X-Hub-Signature-256 Validada
+              <Check size={12} /> HMAC validado por entrega
             </strong>
           </div>
           <div>
             <span style={{ color: 'var(--text-dim)', display: 'block', fontSize: 10 }}>IDEMPOTÊNCIA</span>
-            <strong style={{ color: '#FFFFFF' }}>Chave ativa • TTL 24h</strong>
+            <strong style={{ color: 'var(--text-main)' }}>Delivery ID persistido</strong>
           </div>
         </div>
       </div>
 
       {/* Modal / Painel Inline do Simulador de Webhook */}
       {showSimulator && (
-        <div className="nexus-card" style={{ borderColor: '#3B82F6' }}>
-          <div className="nexus-card-header">
-            <div className="nexus-card-title">
+        <div className="module-card" style={{ borderColor: '#3B82F6' }}>
+          <div className="module-card-header">
+            <div className="module-card-title">
               <Send size={14} style={{ color: '#60A5FA' }} />
-              <span>Simulador E2E de Evento Git (HMAC-SHA256)</span>
+              <span>Teste técnico de recebimento (HMAC-SHA256)</span>
             </div>
             <button
               onClick={() => setShowSimulator(false)}
+              aria-label="Fechar simulador de webhook"
               style={{ background: 'transparent', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer' }}
             >
               <X size={15} />
             </button>
           </div>
 
+          <p className="module-card-subtitle" style={{ marginBottom: 14 }}>
+            Envia um payload assinado diretamente para este módulo; não cria eventos nem altera configurações no GitHub. Serve para validar assinatura, idempotência e persistência antes de configurar o webhook real.
+          </p>
+
           <form onSubmit={handleSimulateWebhook} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            <div className="responsive-grid-three">
               <div>
                 <label className="form-label">Autor do Commit</label>
                 <input
@@ -402,16 +461,30 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
               />
             </div>
 
+            <div>
+              <label className="form-label">Segredo do webhook deste repositório</label>
+              <input
+                type="password"
+                className="form-input"
+                placeholder="O mesmo segredo configurado no cadastro e no GitHub"
+                value={simSecret}
+                onChange={(e) => setSimSecret(e.target.value)}
+                minLength={16}
+                required
+              />
+              <span className="form-help">Usado somente no navegador para assinar este payload de teste; não é armazenado pela SPA.</span>
+            </div>
+
             {simStatus && (
               <div
                 style={{
                   padding: '8px 12px',
                   borderRadius: 6,
-                  backgroundColor: '#050811',
+                  backgroundColor: 'var(--bg-code)',
                   border: '1px solid var(--border-default)',
                   fontSize: 11,
                   fontFamily: 'var(--font-mono)',
-                  color: '#93C5FD',
+                  color: 'var(--info)',
                 }}
               >
                 {simStatus}
@@ -421,8 +494,8 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button
                 type="submit"
-                disabled={simulating || !repository}
-                className="btn-nexus btn-nexus-primary"
+                disabled={simulating || !repository || simSecret.trim().length < 16}
+                className="btn-module btn-module-primary"
               >
                 <Send size={12} />
                 <span>{simulating ? 'Enviando e validando HMAC...' : 'Disparar Push Assinado'}</span>
@@ -433,23 +506,23 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
       )}
 
       {/* Fila Assíncrona: 4 Cards KPI */}
-      <div className="nexus-card">
-        <div className="nexus-card-header">
+      {showOperationalIdeation && <div className="module-card">
+        <div className="module-card-header">
           <div>
-            <div className="nexus-card-title">
-              Fila assíncrona
-              <span className="badge badge-success" style={{ marginLeft: 6 }}>
-                ● Consumidores saudáveis
+            <div className="module-card-title">
+              Fila assíncrona — ideação
+              <span className="badge badge-warning" style={{ marginLeft: 6 }}>
+                Dados de demonstração
               </span>
             </div>
-            <div className="nexus-card-subtitle">
+            <div className="module-card-subtitle">
               Throughput e saúde operacional do processamento em segundo plano via Celery & Redis.
             </div>
           </div>
         </div>
 
         <div className="kpi-grid-4">
-          <div className="kpi-card" style={{ backgroundColor: '#0A0F1D' }}>
+          <div className="kpi-card" style={{ backgroundColor: 'var(--bg-card-secondary)' }}>
             <div className="kpi-card-header">
               <span className="kpi-title">Eventos Processados/min</span>
               <span className="badge badge-success">Estável</span>
@@ -458,7 +531,7 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
             <div className="kpi-sub">+12,4% na última hora</div>
           </div>
 
-          <div className="kpi-card" style={{ backgroundColor: '#0A0F1D' }}>
+          <div className="kpi-card" style={{ backgroundColor: 'var(--bg-card-secondary)' }}>
             <div className="kpi-card-header">
               <span className="kpi-title">Tempo de Resposta (&lt;200ms)</span>
               <span className="badge badge-success">Dentro do SLA</span>
@@ -467,7 +540,7 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
             <div className="kpi-sub">p95 146 ms • SLA atendido</div>
           </div>
 
-          <div className="kpi-card" style={{ backgroundColor: '#0A0F1D' }}>
+          <div className="kpi-card" style={{ backgroundColor: 'var(--bg-card-secondary)' }}>
             <div className="kpi-card-header">
               <span className="kpi-title">Itens na Fila (Redis)</span>
               <span className="badge badge-success">Saudável</span>
@@ -476,7 +549,7 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
             <div className="kpi-sub">worker lag 2,1 s</div>
           </div>
 
-          <div className="kpi-card" style={{ backgroundColor: '#0A0F1D' }}>
+          <div className="kpi-card" style={{ backgroundColor: 'var(--bg-card-secondary)' }}>
             <div className="kpi-card-header">
               <span className="kpi-title">Mensagens na DLQ</span>
               <span className="badge badge-warning">Revisar</span>
@@ -485,20 +558,36 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
             <div className="kpi-sub">0 novas nos últimos 30 min</div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* Tabela: Eventos Recentes */}
-      <div className="nexus-card">
-        <div className="nexus-card-header">
+      <div className="module-card">
+        <div className="module-card-header">
           <div>
-            <div className="nexus-card-title">Eventos recentes</div>
-            <div className="nexus-card-subtitle">
-              Últimas entregas recebidas. Selecione uma linha para inspecionar o payload bruto.
+            <div className="module-card-title">
+              Eventos recentes
+              {!hasLiveDeliveries && showOperationalIdeation && (
+                <span className="badge badge-warning">Ideação demonstrativa</span>
+              )}
+              {!hasLiveDeliveries && !showOperationalIdeation && (
+                <span className="badge badge-info">Sem eventos persistidos</span>
+              )}
+            </div>
+            <div className="module-card-subtitle">
+              {hasLiveDeliveries
+                ? 'Últimas entregas recebidas. Selecione uma linha para consultar os metadados persistidos.'
+                : showOperationalIdeation
+                  ? 'Amostra visual da ideação. Estes registros não vieram do backend.'
+                  : 'Nenhuma entrega foi persistida. Envie um evento no simulador para validar o fluxo real.'}
             </div>
           </div>
-          <button className="btn-nexus btn-nexus-secondary btn-nexus-sm">
+          <button
+            className="btn-module btn-module-secondary btn-module-sm"
+            disabled
+            title="A exportação de eventos ainda não possui endpoint próprio."
+          >
             <Download size={12} />
-            <span>Exportar eventos</span>
+            <span>Exportação em desenvolvimento</span>
           </button>
         </div>
 
@@ -531,17 +620,21 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
               onChange={(e) => setSelectedStatus(e.target.value)}
             >
               <option value="all">Todos os status</option>
-              <option value="202 Accepted">202 Accepted</option>
+              <option value="pending">Pendente</option>
+              <option value="processing">Processando</option>
+              <option value="processed">Processado</option>
+              <option value="failed">Falhou</option>
+              {showOperationalIdeation && <option value="202 Accepted">202 Accepted (ideação)</option>}
             </select>
 
             <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 8 }}>
-              2.848 eventos nas últimas 24 horas
+              {filteredEvents.length} evento(s) exibido(s)
             </span>
           </div>
         </div>
 
         <div className="table-responsive">
-          <table className="nexus-table">
+          <table className="module-table">
             <thead>
               <tr>
                 <th>EVENTO</th>
@@ -554,7 +647,19 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
             </thead>
             <tbody>
               {filteredEvents.map((item) => (
-                <tr key={item.id} onClick={() => openDrawer(item)}>
+                <tr
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Inspecionar entrega ${item.deliveryId}`}
+                  onClick={() => openDrawer(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      openDrawer(item)
+                    }
+                  }}
+                >
                   <td>
                     <span className="badge badge-info">{item.event}</span>
                   </td>
@@ -564,41 +669,57 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
                     </span>
                   </td>
                   <td>
-                    <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{item.author}</span>
+                    <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>
+                      {item.author || 'Não exposto pela API'}
+                    </span>
                   </td>
                   <td style={{ color: 'var(--text-tertiary)' }}>{item.timestamp}</td>
                   <td>
-                    {item.forcePush ? (
+                    {item.forcePush === null ? (
+                      <span style={{ color: 'var(--text-dim)' }}>Não informado</span>
+                    ) : item.forcePush ? (
                       <span className="badge badge-warning">Sim</span>
                     ) : (
                       <span style={{ color: 'var(--text-dim)' }}>Não</span>
                     )}
                   </td>
                   <td>
-                    <span className="badge badge-success">● {item.status}</span>
+                    <span className={`badge ${deliveryStatusBadge(item.status)}`}>
+                      ● {deliveryStatusLabel(item.status)}
+                    </span>
                   </td>
                 </tr>
               ))}
+              {filteredEvents.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 28 }}>
+                    Nenhum evento corresponde aos filtros atuais.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* GAVETA LATERAL DE INSPEÇÃO JSON (DRAWER DA SCREEN 09) */}
-      {drawerOpen && (
+      {/* GAVETA LATERAL DE INSPEÇÃO (DRAWER DA SCREEN 09) */}
+      {drawerOpen && selectedEvent && (
         <aside className="inspector-drawer">
           <div className="drawer-header">
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: '#FFFFFF', fontWeight: 700, fontSize: 14 }}>Inspeção JSON</span>
-                <span className="badge badge-success">● 202 Accepted</span>
+                <span style={{ color: 'var(--text-main)', fontWeight: 700, fontSize: 14 }}>Inspeção da entrega</span>
+                <span className={`badge ${deliveryStatusBadge(selectedEvent.status)}`}>
+                  ● {deliveryStatusLabel(selectedEvent.status)}
+                </span>
               </div>
               <span style={{ fontSize: 10.5, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-                {selectedEvent?.deliveryId}
+                {selectedEvent.deliveryId}
               </span>
             </div>
             <button
               onClick={() => setDrawerOpen(false)}
+              aria-label="Fechar detalhes da entrega"
               style={{ background: 'transparent', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer' }}
             >
               <X size={18} />
@@ -609,7 +730,7 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
             {/* Bloco: Evento Selecionado */}
             <div
               style={{
-                backgroundColor: '#0A0F1D',
+                backgroundColor: 'var(--bg-card-secondary)',
                 border: '1px solid var(--border-default)',
                 borderRadius: 8,
                 padding: 14,
@@ -619,105 +740,53 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF' }}>Evento selecionado</span>
-                <span className="badge badge-info">{selectedEvent?.event}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>Evento selecionado</span>
+                <span className="badge badge-info">{selectedEvent.event}</span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, fontSize: 11 }}>
+              <div className="responsive-grid-three" style={{ gap: 8, fontSize: 11 }}>
                 <div>
                   <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: 10 }}>AUTOR</span>
-                  <span style={{ color: '#FFFFFF', fontWeight: 500 }}>{selectedEvent?.author}</span>
+                  <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>
+                    {selectedEvent.author || 'Não exposto'}
+                  </span>
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: 10 }}>BRANCH</span>
-                  <span style={{ color: '#93C5FD' }}>{selectedEvent?.branch}</span>
+                  <span style={{ color: 'var(--info)' }}>{selectedEvent.branch}</span>
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-tertiary)', display: 'block', fontSize: 10 }}>RECEBIDO</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>14:32:18.041</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{selectedEvent.timestamp}</span>
                 </div>
               </div>
 
-              <div style={{ fontSize: 11, color: '#34D399', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ fontSize: 11, color: selectedEvent.isDemo ? '#FBBF24' : '#34D399', display: 'flex', alignItems: 'center', gap: 5 }}>
                 <CheckCircle2 size={12} />
-                <span>HMAC-SHA256 verificado antes do enfileiramento</span>
+                <span>
+                  {selectedEvent.isDemo
+                    ? 'Amostra visual: dados não persistidos'
+                    : 'Assinatura HMAC-SHA256 validada antes da persistência'}
+                </span>
               </div>
             </div>
 
-            {/* Stepper: Processamento em segundo plano */}
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF' }}>Processamento em segundo plano</span>
-                <span style={{ fontSize: 11, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>1,8 s</span>
+            <div className="module-card" style={{ margin: 0 }}>
+              <div className="module-card-title">Dados persistidos da entrega</div>
+              <div className="responsive-grid-two" style={{ gap: 12, marginTop: 12, fontSize: 11 }}>
+                <div><span style={{ color: 'var(--text-tertiary)', display: 'block' }}>TENTATIVAS</span>{selectedEvent.attempts ?? 'Não informado'}</div>
+                <div><span style={{ color: 'var(--text-tertiary)', display: 'block' }}>COMMITS</span>{selectedEvent.commitsCount ?? 'Não informado'}</div>
+                <div><span style={{ color: 'var(--text-tertiary)', display: 'block' }}>RECEBIDO EM</span>{selectedEvent.receivedAt ? new Date(selectedEvent.receivedAt).toLocaleString('pt-BR') : 'Não informado'}</div>
+                <div><span style={{ color: 'var(--text-tertiary)', display: 'block' }}>PROCESSADO EM</span>{selectedEvent.processedAt ? new Date(selectedEvent.processedAt).toLocaleString('pt-BR') : 'Ainda não concluído'}</div>
               </div>
-
-              <div className="drawer-timeline-step">
-                <div className="stage-step-icon success" style={{ width: 22, height: 22 }}>
-                  <CheckCircle2 size={12} />
+              {selectedEvent.error && (
+                <div style={{ color: '#FCA5A5', marginTop: 12, fontSize: 11 }}>
+                  <strong>Erro:</strong> {selectedEvent.error}
                 </div>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF' }}>Webhook recebido</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Assinatura validada • 84 ms</div>
-                </div>
-              </div>
-
-              <div className="drawer-timeline-step">
-                <div className="stage-step-icon success" style={{ width: 22, height: 22 }}>
-                  <CheckCircle2 size={12} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF' }}>Idempotência verificada</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>delivery_id inédito • Redis SETNX</div>
-                </div>
-              </div>
-
-              <div className="drawer-timeline-step">
-                <div className="stage-step-icon success" style={{ width: 22, height: 22 }}>
-                  <CheckCircle2 size={12} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF' }}>Evento publicado na fila</div>
-                  <div style={{ fontSize: 11, color: '#38BDF8' }}>github.events.v1 • partition 04</div>
-                </div>
-              </div>
-
-              <div className="drawer-timeline-step">
-                <div className="stage-step-icon warning" style={{ width: 22, height: 22 }}>
-                  <Activity size={12} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#60A5FA', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span>Normalização e persistência</span>
-                    <span className="badge badge-info" style={{ fontSize: 9.5 }}>Em processamento</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Worker event-consumer-07 • tentativa 1/3</div>
-                </div>
-              </div>
-
-              <div className="drawer-timeline-step">
-                <div
-                  style={{
-                    width: 22,
-                    height: 22,
-                    borderRadius: '50%',
-                    backgroundColor: '#1E293B',
-                    border: '1px solid var(--border-default)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--text-dim)',
-                  }}
-                >
-                  <Clock size={11} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-dim)' }}>Indexação analítica</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Aguardando conclusão da persistência</div>
-                </div>
-              </div>
+              )}
             </div>
 
-            {/* Code Box: Payload JSON Bruto */}
+            {/* Resumo do contrato disponível */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 10, borderBottom: '1px solid var(--border-default)', paddingBottom: 6 }}>
                 <button
@@ -731,7 +800,7 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
                     cursor: 'pointer',
                   }}
                 >
-                  Payload JSON bruto
+                  Resumo da API
                 </button>
                 <button
                   onClick={() => setActiveJsonTab('headers')}
@@ -744,43 +813,33 @@ export const WebhooksTab: React.FC<WebhooksTabProps> = ({
                     cursor: 'pointer',
                   }}
                 >
-                  Headers
+                  Headers disponíveis
                 </button>
               </div>
 
               <div className="code-box-dark">
                 {activeJsonTab === 'payload' ? (
-                  <pre>{`{
-  "ref": "refs/heads/${selectedEvent?.branch || 'main'}",
-  "before": "8f3a91ce7f86d6a0",
-  "after": "c4b7d2e84a91f0bc",
-  "forced": ${selectedEvent?.forcePush ? 'true' : 'false'},
-  "compare": "https://github.com/${repository?.full_name || 'uftech/academic-ms'}/compare/8f3a91c...c4b7d2e",
-  "repository": {
-    "id": 884120376,
-    "full_name": "${repository?.full_name || 'uftech/academic-ms'}",
-    "private": true,
-    "default_branch": "main"
-  },
-  "pusher": {
-    "name": "${selectedEvent?.author || 'rafael-lima'}",
-    "email": "${selectedEvent?.author || 'rafael'}@uftech.edu.br"
-  },
-  "commits": [
-    {
-      "id": "c4b7d2e84a91f0bc",
-      "message": "feat(events): adiciona consumidor Redis",
-      "distinct": true,
-      "modified": ["src/workers/event-consumer.ts"]
-    }
-  ]
-}`}</pre>
+                  <pre>{JSON.stringify({
+                    delivery_id: selectedEvent.deliveryId,
+                    event: selectedEvent.event,
+                    repository: repository?.full_name || null,
+                    ref: selectedEvent.branch === 'Não informado' ? null : `refs/heads/${selectedEvent.branch}`,
+                    status: selectedEvent.status,
+                    attempts: selectedEvent.attempts ?? null,
+                    commits_count: selectedEvent.commitsCount ?? null,
+                    received_at: selectedEvent.receivedAt || null,
+                    processed_at: selectedEvent.processedAt || null,
+                    error: selectedEvent.error || null,
+                    notice: selectedEvent.isDemo
+                      ? 'Amostra visual da ideação; não persistida.'
+                      : 'Resumo montado com campos expostos pela API; o payload bruto não é retornado.',
+                  }, null, 2)}</pre>
                 ) : (
-                  <pre>{`X-GitHub-Delivery: ${selectedEvent?.deliveryId}
-X-GitHub-Event: ${selectedEvent?.event}
-X-Hub-Signature-256: sha256=9b7a80e08dfdd6a917e29c40bcd104f0287d52db9a45b207d
-Content-Type: application/json
-User-Agent: GitHub-Hookshot/8f3a91c`}</pre>
+                  <pre>{`X-GitHub-Delivery: ${selectedEvent.deliveryId}
+X-GitHub-Event: ${selectedEvent.event}
+X-Hub-Signature-256: validada no recebimento; valor não exposto
+
+Os demais headers originais não são persistidos pelo contrato atual.`}</pre>
                 )}
               </div>
             </div>
@@ -793,25 +852,35 @@ User-Agent: GitHub-Hookshot/8f3a91c`}</pre>
                 borderRadius: 8,
                 padding: 12,
                 fontSize: 11,
-                color: '#93C5FD',
+                color: 'var(--info)',
                 lineHeight: 1.4,
               }}
             >
-              ℹ️ <strong>Estado atual: persistindo commit</strong>
+              ℹ️ <strong>Estado atual: {deliveryStatusLabel(selectedEvent.status)}</strong>
               <p style={{ marginTop: 4, color: 'var(--text-muted)' }}>
-                A resposta HTTP foi desacoplada do processamento. O consumidor segue ativo e nenhuma repetição foi necessária.
+                {deliveryStatusDescription(selectedEvent)}
               </p>
             </div>
 
             {/* Ações do Drawer */}
             <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-              <button className="btn-nexus btn-nexus-primary" style={{ flex: 1 }}>
+              <button
+                className="btn-module btn-module-primary"
+                style={{ flex: 1 }}
+                disabled
+                title="O trace distribuído ainda não é fornecido por este módulo."
+              >
                 <ExternalLink size={12} />
-                <span>Abrir trace distribuído</span>
+                <span>Trace em desenvolvimento</span>
               </button>
-              <button className="btn-nexus btn-nexus-secondary" style={{ flex: 1 }}>
+              <button
+                className="btn-module btn-module-secondary"
+                style={{ flex: 1 }}
+                disabled
+                title="A consulta de logs centralizados ainda não é fornecida por este módulo."
+              >
                 <Terminal size={12} />
-                <span>Logs</span>
+                <span>Logs em desenvolvimento</span>
               </button>
             </div>
           </div>

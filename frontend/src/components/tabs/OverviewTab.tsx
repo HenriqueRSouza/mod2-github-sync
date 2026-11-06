@@ -24,6 +24,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   syncing,
 }) => {
   const [inspectedItem, setInspectedItem] = useState<InspectorItem | null>(null)
+  const showIdeation = false
 
   const totalCommits = flow?.total_commits ?? commits.length
 
@@ -32,28 +33,28 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       {/* 4 KPIs de Topo */}
       <OverviewKpis
         totalCommits={totalCommits}
-        successRate="99,4%"
-        latencyMs={connectivity?.latency_ms ?? 42}
-        webhookActive={connectivity?.status === 'up'}
+        latencyMs={connectivity?.latency_ms}
+        connectivityStatus={connectivity?.status}
+        showIdeation={showIdeation}
       />
 
       {/* Bloco: Atividade e saúde da integração (2 Colunas) */}
-      <div className="nexus-card">
-        <div className="nexus-card-header">
+      {showIdeation && <div className="module-card">
+        <div className="module-card-header">
           <div>
-            <div className="nexus-card-title">
+            <div className="module-card-title">
               Atividade e saúde da integração
               <span className="badge badge-success" style={{ marginLeft: 6 }}>
                 ● Operacional
               </span>
             </div>
-            <div className="nexus-card-subtitle">
+            <div className="module-card-subtitle">
               Pipeline de execução mais recente e verificações dos serviços dependentes.
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(280px, 1fr)', gap: 20 }}>
+        <div className="responsive-grid-overview">
           {/* Coluna Esquerda: Pipeline Horizontal Stepper */}
           <PipelineStepper
             pipelineId={commits.length > 0 ? `sync_${commits[0].sha.slice(0, 8).toUpperCase()}` : 'sync_01JBQ9A7'}
@@ -69,7 +70,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             testing={syncing}
           />
         </div>
-      </div>
+      </div>}
 
       {/* Tabela de Execuções e Commits Reais */}
       <ExecutionsTable

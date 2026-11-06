@@ -1,8 +1,10 @@
-/* ==========================================================================
+@scope (.legacy-root) {
+
+/* ========================================================================== 
    Design System Módulo 6 · Guia de Identidade Visual Oficial (2026-2)
    ========================================================================== */
 
-:root {
+:scope {
   /* Marca */
   --color-primary: #1E2A5A;
   --color-primary-hover: #2F3F7F;
@@ -51,7 +53,7 @@
   --radius-lg: 14px;
 }
 
-[data-theme="dark"] {
+:scope[data-theme="dark"] {
   --color-bg: #0F1220;
   --color-surface: #181C2E;
   --color-surface-hover: #1F243B;
@@ -64,13 +66,13 @@
 }
 
 /* Base Reset */
-* {
+:scope, * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html, body {
+:scope {
   width: 100%;
   min-height: 100vh;
   background-color: var(--color-bg);
@@ -82,7 +84,7 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-#root {
+:scope {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -330,7 +332,7 @@ html, body {
   gap: 12px;
 }
 
-[data-theme="dark"] .hero-banner {
+:scope[data-theme="dark"] .hero-banner {
   background: linear-gradient(135deg, rgba(30, 42, 90, 0.3) 0%, rgba(24, 28, 46, 0.5) 100%);
 }
 
@@ -483,4 +485,6 @@ footer {
   font-size: var(--text-xs);
   border-top: 1px solid var(--color-border);
   margin-top: auto;
+}
+
 }

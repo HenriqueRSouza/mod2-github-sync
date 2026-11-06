@@ -80,6 +80,8 @@ Observação: as screenshots atuais ainda podem exibir Epics/Features no Backlog
   - M2-147 / M2-150: Logging estruturado e resiliência com retries.
   - M2-166 / M2-167: Documentação Swagger e `DEPLOYMENT.md`.
   - M2-169 (US097): Teste e simulador E2E do fluxo completo de webhooks e commits.
+  - M2-79 / M2-84 a M2-92 / M2-95 / M2-97 / M2-98: OpenAPI, credenciais, escopos, criptografia, expiração, auditoria, HMAC por repositório, branches ignoradas e forced push.
+  - M2-131: análise de clareza/frequência/padrões, gargalos e recomendações; IA externa opcional recebe somente agregados.
 
 ### 3. Frontend SPA (Design System Módulo 6)
 - Localização: `/frontend` (React + Vite + TypeScript).
@@ -90,6 +92,8 @@ Observação: as screenshots atuais ainda podem exibir Epics/Features no Backlog
   - Handshake interativo de PAT com avatar e escopos.
   - Painel de métricas KPI e distribuição real de commits por desenvolvedor.
   - Simulador interativo de Webhook E2E com cálculo de HMAC-SHA256 no client e feed de eventos em tempo real.
+  - Sete tabs da POC navegáveis; Analytics e Inteligência Git consomem dados reais, e DevOps declara “em desenvolvimento” sem inventar status.
+  - PAT mantido somente na memória da sessão e segredos removidos dos formulários ao fechar/concluir.
 - Comando de dados demonstrativos: `python manage.py seed_demo_data`.
 
 ### 4. Infraestrutura e Nuvem (Azure)
@@ -101,8 +105,14 @@ Observação: as screenshots atuais ainda podem exibir Epics/Features no Backlog
 - Proteção de custos: Auto-shutdown ativo às 22:00/23:00 (UTC-03:00) para preservar o saldo de créditos (R$ 521,94).
 - Orquestração: Docker Compose v2 (`compose.yaml`) executando Django (Gunicorn), Celery Worker, Redis e PostgreSQL.
 
-## Próximos Passos (Backlog para próximas sessões)
-1. Gravação do vídeo de demonstração do MVP navegando pelo frontend SPA.
-2. Integração de IA para análise semântica de commits (M2-131).
-3. Conexão com os demais módulos da plataforma de assistente inteligente.
+## Fechamento e dependências externas
+
+O escopo interno do Módulo 2 está concluído no código. Permanecem fora do controle exclusivo do grupo:
+
+1. publicar a versão atual, executar migrações e registrar CI/readiness/webhook real no ambiente remoto;
+2. receber do Módulo 1 o contrato de login, JWT, papéis e associação projeto/equipe/repositório;
+3. acordar gateway, CORS e Data Bus e executar testes de contrato com os módulos consumidores;
+4. gravar o vídeo final usando somente estados verificáveis do ambiente escolhido.
+
+GraphQL foi retirado do MVP por decisão arquitetural: REST cobre a jornada atual e não houve benchmark que justificasse uma segunda superfície de integração.
 

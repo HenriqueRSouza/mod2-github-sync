@@ -41,7 +41,7 @@ async function computeHmacSha256(secret: string, message: string): Promise<strin
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?: () => void }) {
+export default function LegacyDashboard({ onSwitchToWorkspace }: { onSwitchToWorkspace?: () => void }) {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [loading, setLoading] = useState(false)
   const [repositories, setRepositories] = useState<Repository[]>([])
@@ -76,13 +76,10 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
   const [showAddRepo, setShowAddRepo] = useState(false)
   const [newOwner, setNewOwner] = useState('')
   const [newName, setNewName] = useState('')
+  const [newWebhookSecret, setNewWebhookSecret] = useState('')
   const [addRepoLoading, setAddRepoLoading] = useState(false)
   const [addRepoError, setAddRepoError] = useState<string | null>(null)
-
-  // Alternar tema
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-  }, [theme])
+  const [simSecret, setSimSecret] = useState('')
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))
@@ -129,9 +126,12 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
     }
   }
 
+  /* oxlint-disable react-hooks/exhaustive-deps -- carga única ao montar a versão legada. */
   useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- busca os dados iniciais do dashboard legado.
     refreshData()
   }, [])
+  /* oxlint-enable react-hooks/exhaustive-deps */
 
   // Testar Handshake PAT (M2-83)
   const handleTestHandshake = async (e: React.FormEvent) => {
@@ -178,7 +178,7 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
 
   const handleAddRepo = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newOwner.trim() || !newName.trim()) return
+    if (!newOwner.trim() || !newName.trim() || newWebhookSecret.length < 16) return
     setAddRepoLoading(true)
     setAddRepoError(null)
     try {
@@ -186,6 +186,7 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
         owner: newOwner.trim(),
         name: newName.trim(),
         token: patToken || undefined,
+        webhook_secret: newWebhookSecret,
       })
       if (status === 201) {
         setRepositories((prev) => [...prev.filter((r) => r.id !== data.id), data])
@@ -193,6 +194,8 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
         setShowAddRepo(false)
         setNewOwner('')
         setNewName('')
+        setSimSecret(newWebhookSecret)
+        setNewWebhookSecret('')
         setSyncMessage(`Repositório ${data.full_name} conectado e sincronizado com sucesso!`)
         await loadRepoData(data.id)
       } else {
@@ -206,7 +209,7 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
   }
 
   const handleSimulatePush = async () => {
-    if (!selectedRepo) return
+    if (!selectedRepo || simSecret.length < 16) return
 
     setSimulating(true)
     setSimStatus('Preparando payload e calculando digest HMAC-SHA256...')
@@ -246,9 +249,7 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
       }
 
       const bodyStr = JSON.stringify(payload)
-      // Segredo configurado no seed: 'mackenzie-secret-2026'
-      const secret = 'mackenzie-secret-2026'
-      const signatureHex = await computeHmacSha256(secret, bodyStr)
+      const signatureHex = await computeHmacSha256(simSecret, bodyStr)
 
       setSimStatus('Enviando requisição POST /webhooks/github...')
 
@@ -277,7 +278,7 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
   }
 
   return (
-    <div className="app-shell">
+    <div className="legacy-root app-shell" data-theme={theme}>
       {/* TOPBAR HEADER */}
       <header className="header-topbar">
         <div className="header-inner">
@@ -329,9 +330,9 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
               {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
             </button>
 
-            {onSwitchToNexus && (
+            {onSwitchToWorkspace && (
               <button
-                onClick={onSwitchToNexus}
+                onClick={onSwitchToWorkspace}
                 className="btn btn-primary btn-sm"
                 style={{
                   background: '#2563EB',
@@ -340,9 +341,9 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
                   fontWeight: 600,
                   boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)',
                 }}
-                title="Alternar para a nova interface Nexus (Academic Intelligence)"
+                title="Alternar para a interface do Módulo 2 GitHub Sync"
               >
-                ✨ Voltar ao Nexus
+                ✨ Ir para o GitHub Sync
               </button>
             )}
           </div>
@@ -475,6 +476,18 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
                 />
               </div>
             </div>
+            <div className="form-group">
+              <label className="form-label">Segredo exclusivo do webhook:</label>
+              <input
+                type="password"
+                className="input-text input-mono"
+                placeholder="mínimo de 16 caracteres"
+                value={newWebhookSecret}
+                minLength={16}
+                onChange={(e) => setNewWebhookSecret(e.target.value)}
+                required
+              />
+            </div>
             {addRepoError && (
               <span style={{ color: 'var(--color-danger)', fontSize: '0.85rem' }}>{addRepoError}</span>
             )}
@@ -592,9 +605,22 @@ export default function LegacyDashboard({ onSwitchToNexus }: { onSwitchToNexus?:
               />
             </div>
 
+            <div className="form-group">
+              <label className="form-label">Segredo do webhook deste repositório:</label>
+              <input
+                type="password"
+                className="input-text input-mono"
+                placeholder="mesmo segredo informado no cadastro"
+                value={simSecret}
+                minLength={16}
+                onChange={(e) => setSimSecret(e.target.value)}
+                required
+              />
+            </div>
+
             <button
               onClick={handleSimulatePush}
-              disabled={simulating || !selectedRepo}
+              disabled={simulating || !selectedRepo || simSecret.length < 16}
               className="btn btn-primary"
             >
               <Send size={15} />

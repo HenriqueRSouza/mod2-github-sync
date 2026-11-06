@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import {
   Search,
   CheckCircle2,
-  XCircle,
   GitBranch,
   ExternalLink,
   RefreshCw,
@@ -27,25 +26,22 @@ export const ExecutionsTable: React.FC<ExecutionsTableProps> = ({
   repoName,
 }) => {
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'failure'>('all')
-
   // Mapeia commits reais da API do GitHub para o formato do visualizador
-  const executions: InspectorItem[] = commits.map((c, i) => {
-    const isFirst = i === 0
+  const executions: InspectorItem[] = commits.map((c) => {
     return {
       id: c.sha,
       title: c.message.split('\n')[0] || c.sha.slice(0, 7),
       status: 'Sucesso',
       commit: c.sha.slice(0, 7),
       branch: c.branch || 'main',
-      author: c.author || 'Eduardo F. de M.',
+      author: c.author || 'Autor não identificado',
       authorInitials: (c.author || 'EF')
         .split(' ')
         .map((n) => n[0])
         .join('')
         .slice(0, 2)
         .toUpperCase(),
-      duration: isFirst ? '2m 14s' : '1m 45s',
+      duration: 'Não medido',
       when: new Date(c.authored_at).toLocaleString('pt-BR', {
         day: '2-digit',
         month: '2-digit',
@@ -64,11 +60,9 @@ export const ExecutionsTable: React.FC<ExecutionsTableProps> = ({
         files: c.files || [],
       },
       logs: [
-        `[INFO] Início da sincronização para o commit ${c.sha.slice(0, 7)}`,
-        `[INFO] Autor verificado: ${c.author || 'Eduardo F. de M.'}`,
-        `[INFO] Mensagem: "${c.message.split('\n')[0]}"`,
-        `[INFO] Arquivos associados indexados: ${c.files?.length || 0}`,
-        `[SUCCESS] Commit persistido na tabela Commit do PostgreSQL`,
+        `[RESUMO LOCAL] Commit ${c.sha.slice(0, 7)} indexado`,
+        `[RESUMO LOCAL] Autor: ${c.author || 'não identificado'}`,
+        `[RESUMO LOCAL] Arquivos associados: ${c.files?.length || 0}`,
       ],
     }
   })
@@ -80,26 +74,21 @@ export const ExecutionsTable: React.FC<ExecutionsTableProps> = ({
       (ex.title && ex.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (ex.branch && ex.branch.toLowerCase().includes(searchTerm.toLowerCase()))
 
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'success' && ex.status === 'Sucesso') ||
-      (statusFilter === 'failure' && ex.status === 'Falha')
-
-    return matchesSearch && matchesStatus
+    return matchesSearch
   })
 
   return (
-    <div className="nexus-card">
-      <div className="nexus-card-header">
+    <div className="module-card">
+      <div className="module-card-header">
         <div>
-          <div className="nexus-card-title">
-            Execuções e Sincronizações Reais
+          <div className="module-card-title">
+            Commits indexados
             <span className="badge badge-success" style={{ marginLeft: 6 }}>
               ● {commits.length} commits sincronizados
             </span>
           </div>
-          <div className="nexus-card-subtitle">
-            Histórico real de commits recebidos da API do GitHub e persistidos no banco de dados.
+          <div className="module-card-subtitle">
+            Registros devolvidos por GET /api/v1/commits para o repositório selecionado.
           </div>
         </div>
 
@@ -116,40 +105,19 @@ export const ExecutionsTable: React.FC<ExecutionsTableProps> = ({
             />
           </div>
 
-          {/* Filtros rápidos */}
-          <div className="filter-button-group">
-            <button
-              className={`filter-btn ${statusFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setStatusFilter('all')}
-            >
-              Todos
-            </button>
-            <button
-              className={`filter-btn ${statusFilter === 'success' ? 'active' : ''}`}
-              onClick={() => setStatusFilter('success')}
-            >
-              Sucesso
-            </button>
-            <button
-              className={`filter-btn ${statusFilter === 'failure' ? 'active' : ''}`}
-              onClick={() => setStatusFilter('failure')}
-            >
-              Falhas
-            </button>
-          </div>
         </div>
       </div>
 
       {filteredExecutions.length > 0 ? (
         <div className="table-wrapper">
-          <table className="nexus-table">
+          <table className="module-table">
             <thead>
               <tr>
                 <th style={{ width: 110 }}>STATUS</th>
                 <th style={{ width: 140 }}>COMMIT</th>
                 <th>BRANCH / MENSAGEM</th>
                 <th style={{ width: 180 }}>AUTOR</th>
-                <th style={{ width: 100 }}>DURAÇÃO</th>
+                <th style={{ width: 100 }}>PROCESSAMENTO</th>
                 <th style={{ width: 140 }}>DATA / HORA</th>
                 <th style={{ width: 80, textAlign: 'right' }}>AÇÕES</th>
               </tr>
@@ -158,22 +126,26 @@ export const ExecutionsTable: React.FC<ExecutionsTableProps> = ({
               {filteredExecutions.map((item) => (
                 <tr
                   key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Inspecionar commit ${item.commit}`}
                   onClick={() => onSelectExecution(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onSelectExecution(item)
+                    }
+                  }}
                   style={{ cursor: 'pointer' }}
-                  title="Clique para abrir o Inspetor JSON e logs detalhados"
+                  title="Clique para abrir o JSON e um resumo local do registro"
                 >
                   <td>
                     {item.status === 'Sucesso' ? (
                       <span className="badge badge-success">
                         <CheckCircle2 size={11} />
-                        Sucesso
+                        Indexado
                       </span>
-                    ) : (
-                      <span className="badge badge-danger">
-                        <XCircle size={11} />
-                        Falha
-                      </span>
-                    )}
+                    ) : null}
                   </td>
                   <td>
                     <span className="mono-badge">{item.commit}</span>
@@ -182,7 +154,7 @@ export const ExecutionsTable: React.FC<ExecutionsTableProps> = ({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <GitBranch size={12} color="#60A5FA" />
-                        <span style={{ fontSize: 11.5, fontWeight: 600, color: '#E2E8F0' }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-main)' }}>
                           {item.branch}
                         </span>
                       </div>
@@ -249,13 +221,13 @@ export const ExecutionsTable: React.FC<ExecutionsTableProps> = ({
             flexDirection: 'column',
             alignItems: 'center',
             gap: 12,
-            backgroundColor: '#0A0F1D',
+            backgroundColor: 'var(--bg-card-secondary)',
             borderRadius: 8,
           }}
         >
           <FolderGit2 size={36} color="#60A5FA" style={{ opacity: 0.6 }} />
           <div>
-            <h3 style={{ fontSize: 15, fontWeight: 600, color: '#FFFFFF', margin: '0 0 4px' }}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-main)', margin: '0 0 4px' }}>
               Nenhum commit encontrado para este repositório
             </h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
@@ -266,12 +238,12 @@ export const ExecutionsTable: React.FC<ExecutionsTableProps> = ({
           {onSyncNow && (
             <button
               onClick={onSyncNow}
-              disabled={syncing}
-              className="btn-nexus btn-nexus-primary btn-nexus-sm"
+              disabled={syncing || !repoName}
+              className="btn-module btn-module-primary btn-module-sm"
               style={{ marginTop: 8 }}
             >
               <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
-              <span>{syncing ? 'Sincronizando...' : 'Sincronizar commits do GitHub agora'}</span>
+              <span>{syncing ? 'Sincronizando...' : repoName ? 'Sincronizar commits do GitHub agora' : 'Conecte um repositório'}</span>
             </button>
           )}
         </div>

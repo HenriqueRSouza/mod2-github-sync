@@ -1,6 +1,7 @@
 # Ambientes e históricos de ferramentas de IA
 .codex-history/
 .codex/
+graphify-out/
 
 # Arquivos de compilação, scripts temporários e dependências locais
 .build/

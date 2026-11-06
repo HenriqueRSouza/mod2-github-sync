@@ -8,37 +8,50 @@ import {
   Lock,
   Radio,
   BarChart3,
-  Bot,
   Rocket,
+  FolderPlus,
+  LogOut,
+  UserCircle2,
 } from 'lucide-react'
-import type { ConnectivityStatus, Repository } from '../api'
+import type { ConnectivityStatus, PlatformProject, Repository } from '../api'
+import type { PlatformUser } from '../platformSession'
 
-export type TabId = 'overview' | 'auth' | 'webhooks' | 'sync' | 'analytics' | 'ai' | 'devops'
+export type TabId = 'overview' | 'auth' | 'webhooks' | 'sync' | 'analytics' | 'devops'
 
 interface HeaderProps {
   activeTab: TabId
   onSelectTab: (tab: TabId) => void
   repositories: Repository[]
+  projects: PlatformProject[]
+  selectedProject: PlatformProject | null
+  user: PlatformUser
   selectedRepo: Repository | null
+  onSelectProject: (project: PlatformProject) => void
   onSelectRepo: (repo: Repository) => void
+  onOpenCreateProject: () => void
   onOpenConnectModal: () => void
   onSyncNow: () => void
   syncing: boolean
   connectivity: ConnectivityStatus | null
-  onSwitchToLegacy?: () => void
+  onLogout: () => void
 }
 
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   onSelectTab,
   repositories,
+  projects,
+  selectedProject,
+  user,
   selectedRepo,
+  onSelectProject,
   onSelectRepo,
+  onOpenCreateProject,
   onOpenConnectModal,
   onSyncNow,
   syncing,
   connectivity,
-  onSwitchToLegacy,
+  onLogout,
 }) => {
   // Breadcrumb e Título baseados na tela ativa
   const getHeaderMeta = () => {
@@ -56,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
       case 'webhooks':
         return {
           breadcrumb: 'Integrações',
-          title: 'Monitor de Webhooks e Eventos Git em Tempo Real',
+          title: 'Monitor de Webhooks e Entregas Persistidas',
         }
       case 'sync':
         return {
@@ -67,11 +80,6 @@ export const Header: React.FC<HeaderProps> = ({
         return {
           breadcrumb: 'Analytics',
           title: 'Analytics de Fluxo e Diagnóstico de Gargalos',
-        }
-      case 'ai':
-        return {
-          breadcrumb: 'Inteligência assistiva',
-          title: 'Central de Inteligência Artificial e Assistente Git',
         }
       case 'devops':
         return {
@@ -84,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { breadcrumb, title } = getHeaderMeta()
 
   return (
-    <header className="nexus-header">
+    <header className="module-header">
       {/* Linha Superior com Título e Ações */}
       <div className="header-row-primary">
         <div className="header-title-box">
@@ -95,11 +103,34 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="header-controls">
+          <div className="select-chip" title="Projeto da plataforma">
+            <FolderGit2 size={13} style={{ color: '#A78BFA' }} />
+            <span>projeto:</span>
+            <select
+              className="header-repository-select"
+              aria-label="Selecionar projeto"
+              value={selectedProject?.id || ''}
+              onChange={(event) => {
+                const found = projects.find((project) => project.id === event.target.value)
+                if (found) onSelectProject(found)
+              }}
+            >
+              {projects.length === 0 && <option value="">Nenhum projeto</option>}
+              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+          </div>
+
+          <button type="button" onClick={onOpenCreateProject} className="btn-module btn-module-secondary" title="Criar projeto no Módulo 1">
+            <FolderPlus size={13} />
+            <span>Novo projeto</span>
+          </button>
+
           {/* Seletor de Repositório Conectado */}
           <div className="select-chip" title="Selecionar Repositório">
             <FolderGit2 size={13} style={{ color: '#60A5FA' }} />
             <span>repo:</span>
             <select
+              className="header-repository-select"
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -151,34 +182,21 @@ export const Header: React.FC<HeaderProps> = ({
             <span>{connectivity?.status === 'up' ? 'GitHub conectado' : 'GitHub desconectado'}</span>
           </div>
 
-          {/* Badge Webhook Ativo */}
-          <div className="status-pill status-pill-info">
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                backgroundColor: '#38BDF8',
-                boxShadow: '0 0 6px #38BDF8',
-              }}
-            />
-            <span>Webhook ativo</span>
-          </div>
-
           {/* Botão Conectar Repositório (abre modal via Link GitHub) */}
           <button
             onClick={onOpenConnectModal}
-            className="btn-nexus btn-nexus-secondary"
-            title="Conectar novo repositório colando a URL do GitHub"
+            disabled={!selectedProject}
+            className="btn-module btn-module-secondary"
+            title={selectedProject ? 'Conectar novo repositório colando a URL do GitHub' : 'Crie ou selecione um projeto primeiro'}
           >
             <Plus size={13} />
-            <span>+ Conectar Repo</span>
+            <span>{selectedProject ? '+ Conectar Repo' : 'Selecione um projeto'}</span>
           </button>
 
           {/* Botão Configurar */}
           <button
             onClick={() => onSelectTab('auth')}
-            className="btn-nexus btn-nexus-secondary"
+            className="btn-module btn-module-secondary"
             title="Configurações e Credenciais"
           >
             <SlidersHorizontal size={13} />
@@ -189,32 +207,25 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onSyncNow}
             disabled={syncing || !selectedRepo}
-            className="btn-nexus btn-nexus-primary"
-            title="Sincronizar commits diretamente da API do GitHub"
+            className="btn-module btn-module-primary"
+            title={selectedRepo ? 'Sincronizar dados diretamente da API do GitHub' : 'Conecte um repositório para sincronizar'}
           >
             <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
-            <span>{syncing ? 'Sincronizando...' : 'Sincronizar agora'}</span>
+            <span>{syncing ? 'Sincronizando...' : selectedRepo ? 'Sincronizar agora' : 'Conecte um repositório'}</span>
           </button>
 
-          {onSwitchToLegacy && (
-            <button
-              onClick={onSwitchToLegacy}
-              className="btn-nexus btn-nexus-secondary"
-              style={{
-                borderColor: '#3B82F6',
-                color: '#93C5FD',
-                backgroundColor: 'rgba(59, 130, 246, 0.12)',
-              }}
-              title="Abrir versão anterior do dashboard para demonstração e gravação"
-            >
-              <span>🎥 Versão Anterior (Demo)</span>
+          <div className="header-account" title={user.email}>
+            <UserCircle2 size={15} />
+            <span>{user.display_name}</span>
+            <button type="button" onClick={onLogout} aria-label="Sair da plataforma" title="Encerrar sessão">
+              <LogOut size={14} />
             </button>
-          )}
+          </div>
         </div>
       </div>
 
-      {/* Barra de Abas (Navegação pelas 7 telas do Figma) */}
-      <nav className="nexus-tabs-bar" aria-label="Navegação do Módulo 2">
+      {/* Navegação pelas áreas previstas nas POCs. DevOps usa um estado explícito até haver fonte remota verificável. */}
+      <nav className="module-tabs-bar" aria-label="Navegação do Módulo 2">
         <button
           className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
           onClick={() => onSelectTab('overview')}
@@ -250,25 +261,19 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
           onClick={() => onSelectTab('analytics')}
+          title="Indicadores calculados a partir dos commits indexados"
         >
           <BarChart3 size={13} />
-          <span>Analytics de Fluxo</span>
-        </button>
-
-        <button
-          className={`tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
-          onClick={() => onSelectTab('ai')}
-        >
-          <Bot size={13} />
-          <span>Assistente IA</span>
+          <span>Analytics</span>
         </button>
 
         <button
           className={`tab-btn ${activeTab === 'devops' ? 'active' : ''}`}
           onClick={() => onSelectTab('devops')}
+          title="Em desenvolvimento: documentação real já disponível"
         >
           <Rocket size={13} />
-          <span>DevOps & Release</span>
+          <span>DevOps & Docs · em desenvolvimento</span>
         </button>
       </nav>
     </header>

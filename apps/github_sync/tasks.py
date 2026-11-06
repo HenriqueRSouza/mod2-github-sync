@@ -1,12 +1,18 @@
+import logging
+import random
 from fnmatch import fnmatch
 
+import requests
 from celery import shared_task
 from django.conf import settings
-from django.db import transaction
+from django.db import InterfaceError, OperationalError, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from .models import Branch, Commit, CommitFile, Contributor, ContributorEmail, PullRequest, WebhookDelivery
+from .observability import correlation_context, redact_text
+
+logger = logging.getLogger(__name__)
 
 
 def _contributor(data):
@@ -29,7 +35,7 @@ def _process_push(delivery):
     branch, _ = Branch.objects.get_or_create(repository=delivery.repository, name=branch_name)
     for item in payload.get("commits", []):
         author = _contributor(item.get("author") or {})
-        commit, created = Commit.objects.update_or_create(
+        commit, _ = Commit.objects.update_or_create(
             repository=delivery.repository,
             sha=item["id"],
             defaults={
@@ -41,7 +47,8 @@ def _process_push(delivery):
                 "forced_push": payload.get("forced", False),
             },
         )
-        if created:
+        if any(change_type in item for change_type in CommitFile.ChangeType.values):
+            commit.files.all().delete()
             for change_type in CommitFile.ChangeType.values:
                 CommitFile.objects.bulk_create(
                     [
@@ -70,16 +77,44 @@ def _process_pull_request(delivery):
     )
 
 
-@shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+def _is_transient(exc: Exception) -> bool:
+    return isinstance(exc, (OperationalError, InterfaceError, requests.Timeout, requests.ConnectionError))
+
+
+def _retry_countdown(retries: int) -> float:
+    # Jitter não participa de nenhuma decisão criptográfica; apenas dispersa retries.
+    return min(60.0, (2**retries) + random.uniform(0, 1))  # nosec B311
+
+
+@shared_task(bind=True, max_retries=3)
 def process_webhook(self, delivery_pk):
+    delivery = WebhookDelivery.objects.select_related("repository").get(pk=delivery_pk)
+    with correlation_context(str(delivery.delivery_id)):
+        return _process_webhook_delivery(self, delivery_pk)
+
+
+def _process_webhook_delivery(task, delivery_pk):
     with transaction.atomic():
         delivery = WebhookDelivery.objects.select_for_update().select_related("repository").get(pk=delivery_pk)
         if delivery.status == WebhookDelivery.Status.PROCESSED:
-            return
+            logger.info("webhook_delivery_already_processed", extra={"delivery_id": str(delivery.delivery_id)})
+            return "already_processed"
         delivery.status = WebhookDelivery.Status.PROCESSING
         delivery.attempts += 1
         delivery.save(update_fields=("status", "attempts"))
-        try:
+
+    logger.info(
+        "webhook_delivery_processing",
+        extra={
+            "delivery_id": str(delivery.delivery_id),
+            "repository_id": delivery.repository_id,
+            "event": delivery.event,
+            "attempt": delivery.attempts,
+        },
+    )
+    try:
+        with transaction.atomic():
+            delivery = WebhookDelivery.objects.select_for_update().select_related("repository").get(pk=delivery_pk)
             if delivery.event == "push":
                 _process_push(delivery)
             elif delivery.event == "pull_request":
@@ -88,8 +123,29 @@ def process_webhook(self, delivery_pk):
             delivery.processed_at = timezone.now()
             delivery.error = ""
             delivery.save(update_fields=("status", "processed_at", "error"))
-        except Exception as exc:
-            delivery.status = WebhookDelivery.Status.FAILED
-            delivery.error = str(exc)[:2000]
-            delivery.save(update_fields=("status", "error"))
-            raise
+        logger.info("webhook_delivery_processed", extra={"delivery_id": str(delivery.delivery_id)})
+        return "processed"
+    except Exception as exc:
+        safe_error = redact_text(f"{type(exc).__name__}: {exc}")[:2000]
+        WebhookDelivery.objects.filter(pk=delivery_pk).update(
+            status=WebhookDelivery.Status.FAILED,
+            error=safe_error,
+            processed_at=None,
+        )
+        logger.exception(
+            "webhook_delivery_failed",
+            extra={
+                "delivery_id": str(delivery.delivery_id),
+                "repository_id": delivery.repository_id,
+                "attempt": delivery.attempts,
+                "transient": _is_transient(exc),
+            },
+        )
+        if _is_transient(exc) and task.request.retries < task.max_retries:
+            countdown = _retry_countdown(task.request.retries)
+            logger.warning(
+                "webhook_delivery_retry_scheduled",
+                extra={"delivery_id": str(delivery.delivery_id), "countdown_seconds": round(countdown, 3)},
+            )
+            raise task.retry(exc=exc, countdown=countdown) from exc
+        raise

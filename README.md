@@ -1,6 +1,8 @@
 # AI Platform — GitHub Service (Módulo 2)
 
-Microsserviço responsável pela integração da **AI Platform** com o GitHub: recebimento de webhooks, autenticação e validação HMAC-SHA256, indexação relacional de commits e pull requests, métricas de fluxo e base para recomendações de IA.
+Ambiente publicado: [GitHub Sync](https://ai-platform-github-service-eduardo-frapb8fbbcd0bfdm.brazilsouth-01.azurewebsites.net/) · [Swagger UI](https://ai-platform-github-service-eduardo-frapb8fbbcd0bfdm.brazilsouth-01.azurewebsites.net/docs/) · [OpenAPI](https://ai-platform-github-service-eduardo-frapb8fbbcd0bfdm.brazilsouth-01.azurewebsites.net/api/schema/?format=json)
+
+Microsserviço responsável pela integração da **AI Platform** com o GitHub: webhooks, sincronização e indexação de repositórios, conteúdo/diffs com proveniência, métricas e inteligência auditável sobre o fluxo Git.
 
 Desenvolvido para a disciplina de **Engenharia de Software (2026.2)** — Universidade Presbiteriana Mackenzie.
 
@@ -14,12 +16,16 @@ Desenvolvido para a disciplina de **Engenharia de Software (2026.2)** — Univer
 ## Fundação Entregue
 
 - **Django REST Framework** com documentação OpenAPI e Swagger UI em `/docs/`.
+- Cadastro, login e projetos integrados ao Módulo 1 por proxy same-origin; JWT `RS256` validado por JWKS, `issuer`, `audience` e expiração.
+- Isolamento dos repositórios e de todos os dados derivados por usuário (`sub`) e `project_id` do Módulo 1.
 - Endpoints de Webhooks: `POST /webhooks/github` e `/api/v1/webhooks/github` com validação de assinatura **HMAC-SHA256**.
 - Segredos de webhooks criptografados no banco por repositório com **AES-256-GCM**.
 - Idempotência rigorosa via cabeçalho `X-GitHub-Delivery` e enfileiramento assíncrono via **Celery / Redis**.
 - Ingestão em segundo plano de eventos de `push` e `pull_request`.
 - Modelo relacional normalizado: Repositories, Branches, Contributors, Emails, Commits, CommitFiles, PullRequests e WebhookDeliveries.
-- Endpoints REST de consulta: `GET /api/v1/commits` (paginado com filtros), `GET /api/v1/metrics/flow` e verificações de integridade (`GET /api/v1/health` e `GET /api/v1/health/github-connectivity`).
+- Contratos REST para consumidores: commits, branches, PRs, conteúdo textual, diffs limitados, métricas e insights de frequência/clareza/gargalos.
+- Operação confiável: logs JSON correlacionados, retry seletivo, replay autenticado, liveness e readiness de banco/Redis/worker/crypto.
+- Política de credenciais: PAT efêmero, escopos mínimos configuráveis e segredo de webhook com versão, expiração, rotação e auditoria.
 - Dashboard operacional integrado em `/dashboard/`.
 - Infraestrutura completa com **Docker Compose**, testes automatizados (**pytest**), SAST (**bandit**), linter (**ruff**) e pipeline de CI no **GitHub Actions**.
 
@@ -40,6 +46,7 @@ Acesse:
 - **Frontend SPA (Vite):** `http://localhost:5173/` (após subir `npm run dev` na pasta `frontend`)
 - **Swagger UI:** `http://localhost:8000/docs/`
 - **Health Check:** `http://localhost:8000/api/v1/health`
+- **Readiness:** `http://localhost:8000/api/v1/health/readiness`
 - **Latência GitHub:** `http://localhost:8000/api/v1/health/github-connectivity`
 - **Django Admin:** `http://localhost:8000/admin/`
 
@@ -61,6 +68,7 @@ python manage.py runserver
 ```bash
 cd frontend
 npm install
+npm run test
 npm run dev
 ```
 Acesse a aplicação completa do MVP em: `http://localhost:5173/`.
@@ -89,11 +97,18 @@ Configure o webhook no GitHub apontando para a rota pública `/webhooks/github` 
 ruff check .
 bandit -q -r apps -x apps/github_sync/tests
 coverage run -m pytest
-coverage report
+coverage report --fail-under=80
 python manage.py makemigrations --check --dry-run
+python manage.py spectacular --validate --fail-on-warn
+npm run lint --prefix frontend
+npm run test --prefix frontend
+npm run build --prefix frontend
 ```
 
 Meta de cobertura de testes: **80%**.
+
+O código pode ser validado localmente sem provar publicação. Produção exige CI remoto verde, migrações,
+`MODULE1_AUTH_REQUIRED=true`, secrets, readiness verde e um sync/webhook real no ambiente publicado.
 
 ---
 
@@ -101,6 +116,11 @@ Meta de cobertura de testes: **80%**.
 
 - [Guia de Deployment](DEPLOYMENT.md)
 - [Arquitetura e Riscos](docs/architecture.md)
+- [Guia de Integração para outros módulos](docs/integration-guide.md)
+- [Mapa de Integração da Plataforma](docs/platform-integration-map.md)
+- [Cobertura das POCs do frontend](docs/poc-coverage.md)
+- [Revisão de status do YouTrack](docs/youtrack-status-review.md)
+- [Backlog restante exclusivo do Módulo 2](docs/module-2-backlog.md)
 - [Decisões Arquiteturais (ADRs)](docs/adr/)
 - [Contexto da AP1 e Backlog](CONTEXTO.md)
 

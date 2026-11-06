@@ -15,7 +15,7 @@ export const DiagnosticCard: React.FC<DiagnosticCardProps> = ({
   return (
     <div
       style={{
-        backgroundColor: '#0A0F1D',
+        backgroundColor: 'var(--bg-card-secondary)',
         border: '1px solid var(--border-default)',
         borderRadius: 8,
         padding: 16,
@@ -27,7 +27,7 @@ export const DiagnosticCard: React.FC<DiagnosticCardProps> = ({
     >
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#FFFFFF' }}>Diagnóstico rápido</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-main)' }}>Diagnóstico rápido</span>
           <span style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>tempo real</span>
         </div>
 
@@ -51,7 +51,7 @@ export const DiagnosticCard: React.FC<DiagnosticCardProps> = ({
 
       <div style={{ display: 'flex', gap: 8 }}>
         <button
-          className="btn-nexus btn-nexus-secondary btn-nexus-sm"
+          className="btn-module btn-module-secondary btn-module-sm"
           style={{ flex: 1 }}
           onClick={onTestConnection}
           disabled={testing}
