@@ -1,3 +1,13 @@
+# Ambientes e históricos de ferramentas de IA
+.codex-history/
+.codex/
+graphify-out/
+
+# Arquivos de compilação, scripts temporários e dependências locais
+.build/
+node_modules/
+
+# Python / Django
 __pycache__/
 *.py[cod]
 *.sqlite3
@@ -8,5 +18,15 @@ htmlcov/
 .venv/
 venv/
 .env
-.DS_Store
 staticfiles/
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+*.tmp
+*.log
+.vscode/
+.idea/
+
+# Staging e repositórios externos temporários (repo-absorb)
+.staging-ref/

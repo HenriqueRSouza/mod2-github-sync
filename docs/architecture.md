@@ -2,13 +2,14 @@
 
 ```mermaid
 flowchart LR
-    GH[GitHub REST / GraphQL] -->|Webhook HMAC| API[Django REST API]
-    Consumer[Frontend / RAG / outros modulos] -->|JWT futuro| API
+    GH[GitHub REST API] -->|Webhook HMAC| API[Django REST API]
+    API -->|Sincronização REST| GH
+    M1[M1 Auth / Projects] -->|JWT RS256 + project_id via API| API
+    Consumer[Frontend / outros modulos] -->|Bearer JWT| API
     API --> PG[(PostgreSQL)]
     API -->|Delivery| Redis[(Redis)]
     Redis --> Worker[Celery Worker]
     Worker --> PG
-    Worker --> GH
     API --> Docs[OpenAPI / Swagger]
 ```
 
@@ -24,7 +25,7 @@ flowchart LR
 
 ## Fronteiras
 
-O modulo indexa dados do GitHub e fornece fatos e metricas. Identidade institucional, interface grafica, chatbot e gestao de projetos pertencem a outros modulos. A IA deve consumir dados normalizados e produzir recomendacoes sem alterar o historico bruto.
+O modulo indexa dados do GitHub e fornece fatos e metricas. Identidade institucional e gestao de projetos pertencem ao Módulo 1 e são consumidas pelo Módulo 2 por proxy/API. A SPA deste repositório é a interface específica do GitHub Sync; portal central, chatbot e relatórios corporativos pertencem a outros módulos. A IA opcional deve consumir somente agregados e produzir recomendações sem alterar o histórico bruto.
 
 ## Riscos iniciais
 
@@ -38,9 +39,11 @@ O modulo indexa dados do GitHub e fornece fatos e metricas. Identidade instituci
 | Perda de evento | Persistencia da entrega antes do enfileiramento e reconciliacao futura |
 | Identidade duplicada | Multiplos emails vinculados ao mesmo colaborador |
 
-## Proximas decisoes
+## Evoluções pós-MVP
+
+Os itens abaixo são oportunidades futuras e não fazem parte do recorte funcional concluído:
 
 - Avaliar GitHub App como mecanismo principal; PAT deve ser apenas opcao de desenvolvimento.
 - Introduzir DLQ operacional e reconciliacao periodica antes da primeira integracao real.
-- Definir JWT compartilhado e contrato Pact com os modulos consumidores.
+- Automatizar testes de contrato com os módulos consumidores a partir do OpenAPI publicado.
 - Separar analytics/IA do pipeline de ingestao para preservar latencia do SLA de dois minutos.

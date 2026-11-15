@@ -14,6 +14,10 @@ def _master_key() -> bytes:
     return key
 
 
+def validate_master_key() -> None:
+    _master_key()
+
+
 def encrypt_secret(value: str) -> bytes:
     nonce = os.urandom(12)
     ciphertext = AESGCM(_master_key()).encrypt(nonce, value.encode(), None)

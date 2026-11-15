@@ -1,0 +1,18 @@
+{
+  "modules": {
+    "mod2-github-sync": {
+      "upstream": "https://github.com/HenriqueRSouza/mod2-github-sync.git",
+      "branch": "main",
+      "last_absorbed_commit": "7fde0cb",
+      "absorbed_at": "2026-10-10",
+      "source_path": "/",
+      "target_files": [
+        "apps/github_sync/",
+        "config/",
+        "Dockerfile",
+        "compose.yaml",
+        "manage.py"
+      ]
+    }
+  }
+}

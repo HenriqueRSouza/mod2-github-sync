@@ -2,6 +2,7 @@ import uuid
 from datetime import timedelta
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
@@ -11,9 +12,9 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def signed_in_client(client, settings):
-    settings.ACCESS_TOKEN = "test-token"
-    client.defaults["HTTP_AUTHORIZATION"] = "Bearer test-token"
+def signed_in_client(client):
+    user = get_user_model().objects.create_user(username="viewer", password="test-password")
+    client.force_login(user)
     return client
 
 
@@ -22,10 +23,12 @@ def repository():
     return Repository.objects.create(github_id=100, owner="team", name="project", webhook_secret=b"encrypted")
 
 
-def test_dashboard_requires_login(client, repository, settings):
-    settings.AUTO_LOGIN = False
-    assert client.get(reverse("dashboard")).status_code == 302
-    assert client.get(reverse("dashboard-metrics")).status_code in (401, 403)
+def test_dashboard_metrics_requires_login(client, repository, settings):
+    settings.MODULE1_AUTH_REQUIRED = True
+    response = client.get(reverse("dashboard-metrics"))
+
+    assert response.status_code in (401, 403)
+    assert response.json()["code"] in ("not_authenticated", "permission_denied")
 
 
 def test_dashboard_aggregates_distinct_events_and_sla(signed_in_client, repository):
@@ -70,9 +73,6 @@ def test_dashboard_aggregates_distinct_events_and_sla(signed_in_client, reposito
 
 
 def test_dashboard_empty_state_and_filters(signed_in_client, repository):
-    page = signed_in_client.get(reverse("dashboard"))
-    assert page.status_code == 200
-    assert b"Nenhuma atividade" in page.content
     data = signed_in_client.get(reverse("dashboard-metrics"), {"days": 30}).json()
     assert data["sla_percent"] is None
     assert data["processing_within_2m_percent"] is None

@@ -1,110 +1,136 @@
-# GitHub Sync - Modulo 2
+# AI Platform — GitHub Service (Módulo 2) · Motor de Sincronização
 
-Microsservico para integrar a plataforma academica ao GitHub, receber webhooks, indexar commits e pull requests e oferecer dados para analytics e recomendacoes de IA.
+**Responsável por este repositório:** Henrique Ribeiro (10401770) — Product Owner & Data Engine Dev.
 
-## Fundacao entregue
+Escopo entregue aqui: **motor de sincronização, coleta de fatos Git e métricas** — ingestão de webhooks
+(`push`/`pull_request`), cadastro automático de repositórios, importação do histórico recente
+(backfill de commits e PRs), métricas de fluxo/commits e documentação do backlog.
 
-- Django REST Framework com OpenAPI e Swagger em `/docs/`.
-- `POST /webhooks/github` e `/api/v1/webhooks/github` com HMAC-SHA256.
-- Segredo individual por repositorio protegido com AES-256-GCM.
-- Idempotencia por `X-GitHub-Delivery` e processamento assincrono com Celery.
-- Ingestao inicial dos eventos `push` e `pull_request`.
-- Modelo relacional para repositorios, branches, contribuidores, emails, commits, arquivos e PRs.
-- `GET /api/v1/commits`, `GET /api/v1/metrics/flow` e health checks.
-- PostgreSQL, Redis, Docker Compose, testes, lint, SAST e CI.
+| Ambiente | Link |
+| --- | --- |
+| Este serviço (Azure · ProjetoEngModulo) | [https://projetoengmodulo-c4dyc7czchdnevgg.francecentral-01.azurewebsites.net](https://projetoengmodulo-c4dyc7czchdnevgg.francecentral-01.azurewebsites.net/) · [Swagger](https://projetoengmodulo-c4dyc7czchdnevgg.francecentral-01.azurewebsites.net/docs/) · [Health](https://projetoengmodulo-c4dyc7czchdnevgg.francecentral-01.azurewebsites.net/api/v1/health) |
+| Serviço integrado do Eduardo (backend core, M1/M6, IA) | [https://ai-platform-github-service-eduardo-frapb8fbbcd0bfdm.brazilsouth-01.azurewebsites.net](https://ai-platform-github-service-eduardo-frapb8fbbcd0bfdm.brazilsouth-01.azurewebsites.net/) · [Swagger](https://ai-platform-github-service-eduardo-frapb8fbbcd0bfdm.brazilsouth-01.azurewebsites.net/docs/) |
+| Repositório do Eduardo | [EduardoFdeM/ai-platform-github-service](https://github.com/EduardoFdeM/ai-platform-github-service) |
 
-Esta e uma fundacao, nao a implementacao integral das cem historias. Sincronizacao historica, GraphQL, GitHub App, DLQ dedicada, cache, JWT, exportacao, Pact, Prometheus e IA permanecem no roadmap.
+Integração entre os dois serviços: mesmo login do **Módulo 1** (JWT RS256/JWKS), mesma Central de
+Notificações do **Módulo 6**, e o webhook deste repositório também alimenta o serviço do Eduardo.
 
-## Inicio rapido
+### Organização das branches
+
+- `main` — desenvolvimento do Henrique (este escopo; deploy automático no Azure).
+- `eduardo` — espelho do repositório do Eduardo (backend core, segurança, infraestrutura e integrações).
+- `pedro` — frontend SPA (Vite/React) do Pedro, consumindo a API publicada.
+
+
+Microsserviço responsável pela integração da **AI Platform** com o GitHub: webhooks, sincronização e indexação de repositórios, conteúdo/diffs com proveniência, métricas e inteligência auditável sobre o fluxo Git.
+
+Desenvolvido para a disciplina de **Engenharia de Software (2026.2)** — Universidade Presbiteriana Mackenzie.
+
+## Equipe (Módulo 2)
+- **Pedro Cavalcante** — 10437298
+- **Henrique Ribeiro** — 10401770
+- **Eduardo Ferreira de Mattos** — 10402800
+
+---
+
+## Fundação Entregue
+
+- **Django REST Framework** com documentação OpenAPI e Swagger UI em `/docs/`.
+- Cadastro, login e projetos integrados ao Módulo 1 por proxy same-origin; JWT `RS256` validado por JWKS, `issuer`, `audience` e expiração.
+- Isolamento dos repositórios e de todos os dados derivados por usuário (`sub`) e `project_id` do Módulo 1.
+- Endpoints de Webhooks: `POST /webhooks/github` e `/api/v1/webhooks/github` com validação de assinatura **HMAC-SHA256**.
+- Segredos de webhooks criptografados no banco por repositório com **AES-256-GCM**.
+- Idempotência rigorosa via cabeçalho `X-GitHub-Delivery` e enfileiramento assíncrono via **Celery / Redis**.
+- Ingestão em segundo plano de eventos de `push` e `pull_request`.
+- Modelo relacional normalizado: Repositories, Branches, Contributors, Emails, Commits, CommitFiles, PullRequests e WebhookDeliveries.
+- Contratos REST para consumidores: commits, branches, PRs, conteúdo textual, diffs limitados, métricas e insights de frequência/clareza/gargalos.
+- Operação confiável: logs JSON correlacionados, retry seletivo, replay autenticado, liveness e readiness de banco/Redis/worker/crypto.
+- Política de credenciais: PAT efêmero, escopos mínimos configuráveis e segredo de webhook com versão, expiração, rotação e auditoria.
+- Dashboard operacional integrado em `/dashboard/`.
+- Infraestrutura completa com **Docker Compose**, testes automatizados (**pytest**), SAST (**bandit**), linter (**ruff**) e pipeline de CI no **GitHub Actions**.
+
+---
+
+## Início Rápido
+
+### Com Docker (Recomendado)
 
 ```bash
 cp .env.example .env
-# Gere CREDENTIAL_MASTER_KEY conforme o comentario do arquivo e troque os demais segredos.
+# Configure CREDENTIAL_MASTER_KEY e as variáveis no .env
 docker compose up --build -d
+docker compose exec app python manage.py seed_demo_data
 ```
 
-Acesse `http://localhost:8000/docs/` e `http://localhost:8000/api/v1/health`.
+Acesse:
+- **Frontend SPA:** branch `pedro`
+- **Swagger UI:** `http://localhost:8000/docs/`
+- **Health Check:** `http://localhost:8000/api/v1/health`
+- **Readiness:** `http://localhost:8000/api/v1/health/readiness`
+- **Latência GitHub:** `http://localhost:8000/api/v1/health/github-connectivity`
+- **Django Admin:** `http://localhost:8000/admin/`
 
-## Registrar um repositorio
+### Sem Docker (Desenvolvimento Local)
 
-Obtenha o ID numerico do repositorio no GitHub e use o mesmo segredo ao configurar seu webhook:
+Requer Python 3.12+ e Node.js 20+.
+
+**1. Backend (Terminal 1):**
+```bash
+python -m venv .venv
+source .venv/bin/activate  # No Windows: .\.venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt
+python manage.py migrate
+python manage.py seed_demo_data
+python manage.py runserver
+```
+
+O frontend SPA fica na branch `pedro` (`git switch pedro && npm install && npm run dev`).
+
+*(Sem `POSTGRES_HOST`, o projeto utiliza SQLite local; para testes síncronos sem Redis, utilize `CELERY_TASK_ALWAYS_EAGER=true`).*
+
+---
+
+## Registrar Repositório para Webhooks
 
 ```bash
 docker compose exec app python manage.py register_repository \
   --github-id 123456 \
   --owner minha-organizacao \
   --name meu-repositorio \
-  --webhook-secret 'um-segredo-forte'
+  --webhook-secret 'seu-segredo-aqui'
 ```
 
-Configure o webhook para apontar a uma URL publica terminada em `/webhooks/github`, selecione `application/json` e habilite inicialmente eventos de push e pull request.
+Configure o webhook no GitHub apontando para a rota pública `/webhooks/github` com `application/json`.
 
-### Integracao de teste com mod2-github-sync
+---
 
-Com Docker Desktop aberto e a conta `HenriqueRSouza` autenticada no GitHub CLI (`gh`), execute:
-
-```bash
-python3 scripts/setup_test_webhook.py
-```
-
-O comando sobe a aplicacao e um tunel HTTPS temporario, cadastra
-`HenriqueRSouza/mod2-github-sync`, configura seu webhook para `push` e `pull_request`
-e verifica uma entrega `ping` enviada pelo GitHub. O segredo permanece criptografado
-no banco. Apenas `/webhooks/github` aceita acesso pelo tunel; a API continua local.
-Para testar outro repositorio, informe `--repository dono/nome`.
-
-A URL do tunel pode mudar quando ele reiniciar. Execute novamente o comando para
-atualizar o webhook existente. Docker e o computador precisam permanecer ligados
-para receber eventos. Esta configuracao serve para testes, nao para hospedagem permanente.
-
-Consulte os dados no painel em `http://localhost:8000/dashboard/`. Com
-`AUTO_LOGIN=true` (padrao) o painel abre direto; com `AUTO_LOGIN=false` ele pede o
-token definido em `ACCESS_TOKEN`. A API aceita o mesmo token no header
-`Authorization: Bearer <token>`.
-Selecione `HenriqueRSouza/mod2-github-sync` no filtro de repositorios.
-O webhook processa eventos recebidos; nao importa automaticamente o historico.
-
-Para parar todos os servicos, incluindo o tunel:
-
-```bash
-docker compose -f compose.yaml -f compose.webhook-test.yaml down
-```
-
-## Desenvolvimento sem Docker
-
-O projeto requer Python 3.12+.
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-dev.txt
-python manage.py migrate
-python manage.py runserver
-```
-
-Sem `POSTGRES_HOST`, o ambiente local usa SQLite. Redis continua necessario para execucao assincrona; em testes, use `CELERY_TASK_ALWAYS_EAGER=true`.
-
-## Qualidade
+## Qualidade e Testes
 
 ```bash
 ruff check .
 bandit -q -r apps -x apps/github_sync/tests
 coverage run -m pytest
-coverage report
+coverage report --fail-under=80
 python manage.py makemigrations --check --dry-run
+python manage.py spectacular --validate --fail-on-warn
 ```
 
-Meta de cobertura: 80%.
+Meta de cobertura de testes: **80%**.
 
-## Documentacao
+O código pode ser validado localmente sem provar publicação. Produção exige CI remoto verde, migrações,
+`MODULE1_AUTH_REQUIRED=true`, secrets, readiness verde e um sync/webhook real no ambiente publicado.
 
-- [Arquitetura, fronteiras e riscos](docs/architecture.md)
-- [Deployment](DEPLOYMENT.md)
-- [ADRs](docs/adr/)
+---
 
-## Roadmap sugerido
+## Documentação e Arquitetura
 
-1. E0/E1: fechar contratos, GitHub App, credenciais e autenticar APIs internas.
-2. E2/E3: completar eventos, DLQ, sincronizacao historica, reconciliacao e cache.
-3. E4: calcular lead time, tempo de review, hotspots e concentracao temporal.
-4. E5/E6: observabilidade, contrato, E2E, hardening, deploy e release.
+- [Guia de Deployment](DEPLOYMENT.md)
+- [Arquitetura e Riscos](docs/architecture.md)
+- [Guia de Integração para outros módulos](docs/integration-guide.md)
+- [Mapa de Integração da Plataforma](docs/platform-integration-map.md)
+- [Cobertura das POCs do frontend](docs/poc-coverage.md)
+- [Revisão de status do YouTrack](docs/youtrack-status-review.md)
+- [Backlog restante exclusivo do Módulo 2](docs/module-2-backlog.md)
+- [Decisões Arquiteturais (ADRs)](docs/adr/)
+- [Contexto da AP1 e Backlog](CONTEXTO.md)
+
