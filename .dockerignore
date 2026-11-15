@@ -8,3 +8,10 @@ __pycache__
 htmlcov
 .coverage
 staticfiles
+.build
+frontend/node_modules
+node_modules
+output
+references
+assets
+.codex-history

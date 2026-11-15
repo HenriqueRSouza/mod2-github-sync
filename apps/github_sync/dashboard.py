@@ -110,8 +110,10 @@ def dashboard_summary(repository, days=7):
     }
 
 
-def dashboard_repository(repository_id):
-    repositories = Repository.objects.filter(active=True).order_by("owner", "name")
+def dashboard_repository(repository_id, repositories=None):
+    repositories = (repositories if repositories is not None else Repository.objects.filter(active=True)).order_by(
+        "owner", "name"
+    )
     if repository_id is None:
         preferred = getattr(settings, "DASHBOARD_DEFAULT_REPOSITORY", "")
         if "/" in preferred:
