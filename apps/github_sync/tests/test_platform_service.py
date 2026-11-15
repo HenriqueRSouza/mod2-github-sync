@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
-from apps.github_sync.services.platform import PlatformServiceError, _request
+from apps.github_sync.services.platform import PlatformServiceError, _request, delete_project
 
 
 def test_platform_request_uses_split_connect_and_read_timeout(settings):
@@ -52,3 +52,19 @@ def test_platform_request_maps_network_failure_to_service_unavailable(settings):
 
     assert error.value.status_code == 503
     assert error.value.detail == {"detail": "O Módulo 1 está temporariamente indisponível."}
+
+
+def test_delete_project_forwards_bearer_and_accepts_empty_204_response(settings):
+    settings.MODULE1_PROJECTS_BASE_URL = "https://module-1.example"
+    response = Mock(status_code=204)
+    response.json.side_effect = ValueError
+
+    with patch("apps.github_sync.services.platform.requests.request", return_value=response) as request:
+        delete_project("token-value", "46d493f0-40c7-4f92-b13c-330dde429779")
+
+    request.assert_called_once_with(
+        "DELETE",
+        "https://module-1.example/projects/46d493f0-40c7-4f92-b13c-330dde429779",
+        headers={"Authorization": "Bearer token-value"},
+        timeout=settings.MODULE1_HTTP_TIMEOUT,
+    )

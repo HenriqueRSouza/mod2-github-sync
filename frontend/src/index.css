@@ -1994,6 +1994,42 @@ html, body {
 .platform-security-note svg { color: var(--success); flex: 0 0 auto; }
 .platform-session-loading { color: var(--text-muted); font-size: 13px; }
 
+.onboarding-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 18px;
+}
+.onboarding-card-header { display: flex; gap: 20px; justify-content: space-between; align-items: flex-start; }
+.onboarding-eyebrow { color: var(--primary); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.onboarding-card h2 { margin: 5px 0 6px; color: var(--text-main); font-size: 18px; }
+.onboarding-card p { margin: 0; color: var(--text-tertiary); font-size: 12px; line-height: 1.5; }
+.onboarding-progress { flex: 0 0 auto; min-width: 104px; padding: 10px 12px; border: 1px solid var(--primary-border); border-radius: 8px; background: var(--primary-subtle); color: var(--primary); text-align: center; }
+.onboarding-progress strong { display: block; font-size: 18px; line-height: 1; }
+.onboarding-progress span { display: block; margin-top: 4px; font-size: 10px; color: var(--text-tertiary); }
+.onboarding-steps { display: grid; gap: 8px; padding: 0; margin: 18px 0 0; list-style: none; }
+.onboarding-step { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-card-secondary); }
+.onboarding-step.is-done { border-color: var(--success-border); background: var(--success-subtle); }
+.onboarding-step-index { display: grid; flex: 0 0 28px; width: 28px; height: 28px; place-items: center; border: 1px solid var(--primary-border); border-radius: 50%; color: var(--primary); font-size: 12px; font-weight: 700; }
+.onboarding-step.is-done .onboarding-step-index { border-color: var(--success-border); color: var(--success); }
+.onboarding-step-copy { flex: 1; min-width: 0; }
+.onboarding-step-copy strong { display: block; color: var(--text-main); font-size: 12.5px; }
+.onboarding-step-copy p { margin-top: 3px; font-size: 11px; }
+.onboarding-step .btn-module { flex: 0 0 auto; }
+.onboarding-insights { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--text-muted); font-size: 11.5px; }
+.onboarding-insights svg { color: var(--info); flex: 0 0 auto; }
+.link-button { border: 0; padding: 0; background: transparent; color: var(--primary); font: inherit; font-weight: 600; cursor: pointer; }
+.link-button:hover { text-decoration: underline; }
+@media (max-width: 700px) {
+  .onboarding-card-header { flex-direction: column; }
+  .onboarding-progress { width: 100%; }
+  .onboarding-step { align-items: flex-start; flex-wrap: wrap; }
+  .onboarding-step-copy { min-width: calc(100% - 42px); }
+  .onboarding-step .btn-module { width: 100%; justify-content: center; }
+  .onboarding-insights { align-items: flex-start; flex-wrap: wrap; }
+}
+
 .header-account {
   min-height: 34px;
   padding: 5px 6px 5px 10px;

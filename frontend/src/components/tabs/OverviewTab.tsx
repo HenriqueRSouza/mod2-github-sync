@@ -1,18 +1,23 @@
 import React, { useState } from 'react'
-import type { Commit, ConnectivityStatus, FlowMetrics, Repository } from '../../api'
+import type { Commit, ConnectivityStatus, Delivery, FlowMetrics, Repository } from '../../api'
 import { OverviewKpis } from './overview/OverviewKpis'
 import { PipelineStepper } from './overview/PipelineStepper'
 import { DiagnosticCard } from './overview/DiagnosticCard'
 import { ExecutionsTable } from './overview/ExecutionsTable'
 import { InspectorDrawer, type InspectorItem } from '../common/InspectorDrawer'
+import { RepositoryOnboarding } from '../onboarding/RepositoryOnboarding'
 
 interface OverviewTabProps {
   commits: Commit[]
   connectivity: ConnectivityStatus | null
   flow: FlowMetrics | null
   selectedRepo: Repository | null
+  deliveries: Delivery[]
   onSyncNow: () => void
   syncing: boolean
+  onConnectRepository: () => void
+  onOpenWebhooks: () => void
+  onOpenAnalytics: () => void
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
@@ -20,8 +25,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   connectivity,
   flow,
   selectedRepo,
+  deliveries,
   onSyncNow,
   syncing,
+  onConnectRepository,
+  onOpenWebhooks,
+  onOpenAnalytics,
 }) => {
   const [inspectedItem, setInspectedItem] = useState<InspectorItem | null>(null)
   const showIdeation = false
@@ -30,6 +39,17 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
   return (
     <div className="tab-pane-container">
+      <RepositoryOnboarding
+        repository={selectedRepo}
+        commitsCount={totalCommits}
+        deliveries={deliveries}
+        syncing={syncing}
+        onConnectRepository={onConnectRepository}
+        onSyncRepository={onSyncNow}
+        onOpenWebhooks={onOpenWebhooks}
+        onOpenAnalytics={onOpenAnalytics}
+      />
+
       {/* 4 KPIs de Topo */}
       <OverviewKpis
         totalCommits={totalCommits}

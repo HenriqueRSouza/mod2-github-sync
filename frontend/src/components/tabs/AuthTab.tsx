@@ -22,6 +22,7 @@ interface AuthTabProps {
   repository: Repository | null
   project: PlatformProject | null
   onRequestUnlinkRepository: () => void
+  onRequestDeleteProject: () => void
 }
 
 export const AuthTab: React.FC<AuthTabProps> = ({
@@ -30,6 +31,7 @@ export const AuthTab: React.FC<AuthTabProps> = ({
   repository,
   project,
   onRequestUnlinkRepository,
+  onRequestDeleteProject,
 }) => {
   // Campos de GitHub App, cofre, rotação e auditoria vieram da POC, mas não
   // possuem contrato de backend aceito. Só aparecem quando a ideação é ativada.
@@ -611,12 +613,14 @@ export const AuthTab: React.FC<AuthTabProps> = ({
         )}
 
         {project && (
-          <div className="danger-zone-action is-pending">
+          <div className="danger-zone-action">
             <div>
               <strong>Excluir projeto {project.name}</strong>
-              <p>A exclusão do projeto compartilhado depende de uma rota segura no serviço de Projetos do Módulo 1. Esta ação não é simulada pelo Módulo 2.</p>
+              <p>Exclui o projeto no Módulo 1 somente se ele estiver vazio e sem repositórios vinculados neste módulo. Não apaga nenhum repositório remoto no GitHub.</p>
             </div>
-            <span className="badge badge-warning">Aguardando contrato do Módulo 1</span>
+            <button type="button" className="btn-module btn-module-danger" onClick={onRequestDeleteProject}>
+              <Trash2 size={14} /> Excluir projeto
+            </button>
           </div>
         )}
       </section>

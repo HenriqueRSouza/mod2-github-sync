@@ -1,6 +1,6 @@
 # Guia de integração — Módulo 2 (GitHub Sync)
 
-Referência dos contratos disponíveis no código e no ambiente publicado em **27 de outubro de 2026**. O módulo recebe e sincroniza fatos do GitHub, expõe conteúdo/diffs sob demanda e produz indicadores auditáveis. O pipeline, o health, a readiness, a conectividade GitHub, o schema OpenAPI e a interface pública foram verificados no App Service.
+Referência dos contratos disponíveis no código e no ambiente publicado em **10 de novembro de 2026**. O módulo recebe e sincroniza fatos do GitHub, expõe conteúdo/diffs sob demanda e produz indicadores auditáveis. O pipeline, o health, a readiness, a conectividade GitHub, o schema OpenAPI e a interface pública foram verificados no App Service.
 
 ## Prontidão
 
@@ -15,6 +15,7 @@ Referência dos contratos disponíveis no código e no ambiente publicado em **2
 | Login/JWT e projetos | concluída | disponibilidade das APIs do Módulo 1 |
 | Isolamento usuário/projeto | concluída | Bearer válido e `project_id` pertencente ao `sub` |
 | CORS do Módulo 1 | contornado por proxy same-origin no M2 | frontend e backend M2 na mesma origem |
+| Central de Notificações M6 | concluída, opt-in e assíncrona | URL, chave e flag configuradas no backend |
 | Gateway e Data Bus compartilhados | integração pendente | acordo entre os grupos |
 
 Dados criados por `seed_demo_data` são somente demonstração local e nunca devem ser apresentados como dados institucionais.
@@ -49,7 +50,7 @@ Base pública validada: `https://ai-platform-github-service-eduardo-frapb8fbbcd0
 - `X-Request-ID` é aceito/gerado e devolvido na resposta; preserve-o ao correlacionar logs.
 
 O M2 não cria identidades nem projetos em seu próprio banco: as rotas `/platform` apenas validam payloads e encaminham
-ao Módulo 1. O access token fica no `sessionStorage` do frontend, expira após 1.800 segundos e é removido no logout/401.
+ao Módulo 1. Com **Lembrar de mim**, o token fica no `localStorage`; sem essa opção, fica no `sessionStorage`. Ele expira após 1.800 segundos e é removido no logout ou quando uma chamada autenticada ao Módulo 1 retorna `401`.
 
 ## Catálogo de endpoints
 
@@ -62,6 +63,7 @@ ao Módulo 1. O access token fica no `sessionStorage` do frontend, expira após 
 | `POST /api/v1/platform/auth/token` | pública | troca e-mail/senha por Bearer de 30 minutos |
 | `GET /api/v1/platform/auth/me` | Bearer M1 | devolve usuário validado pelo Módulo 1 |
 | `GET\|POST /api/v1/platform/projects` | Bearer M1 | lista/cria projetos do usuário no Módulo 1 |
+| `DELETE /api/v1/platform/projects/{project_id}` | Bearer M1 | exclui projeto vazio do Módulo 1, após confirmar que não há repositório ativo no M2 |
 | `POST /api/v1/github/handshake` | Bearer M1 + PAT efêmero | valida identidade GitHub e escopos |
 | `GET /api/v1/repositories?project_id={uuid}` | Bearer M1 | lista somente repositórios do usuário/projeto |
 | `POST /api/v1/repositories` | Bearer M1 | valida projeto, cadastra, cifra segredo e tenta carga inicial |
@@ -80,6 +82,16 @@ ao Módulo 1. O access token fica no `sessionStorage` do frontend, expira após 
 | `POST /webhooks/github` | HMAC GitHub | recebe evento assinado |
 
 Todas as rotas JSON usam `Content-Type: application/json`. Erros controlados seguem `{"code":"...","detail":"..."}`; automações devem decidir pelo status HTTP e pelo `code`.
+
+## Central de Notificações — Módulo 6
+
+O M2 pode projetar eventos operacionais para o Módulo 6 sem acoplar a jornada
+principal à disponibilidade da Central. A configuração é inteiramente de
+servidor, o envio é assíncrono e somente sincronizações concluídas/falhas e
+falhas definitivas de webhook são notificadas. O envelope não inclui PAT,
+segredos, payloads de webhook, arquivos ou diffs. Consulte
+[module6-notifications.md](module6-notifications.md) para variáveis, catálogo,
+retry e roteiro de E2E conjunto.
 
 ## Autenticação e projetos
 
@@ -106,6 +118,8 @@ Authorization: Bearer <ACCESS_TOKEN>
 ```
 
 `GET /api/v1/platform/projects` lista projetos e `POST /api/v1/platform/projects` aceita `name` e `description`.
+
+`DELETE /api/v1/platform/projects/{project_id}` encaminha a exclusão ao Módulo 1 somente quando o GitHub Sync não possui repositórios ativos para o projeto. O contrato retorna `204` sem corpo para projeto vazio e pode retornar `409` se existirem itens, vínculos ou escritas em andamento. A operação nunca apaga repositórios remotos, dados do Backlog ou dados de outros módulos em cascata.
 Backends de outros módulos podem obter o token diretamente no Módulo 1 e usar o mesmo Bearer no M2; não precisam
 passar pelo proxy de interface.
 
@@ -214,6 +228,8 @@ Cada arquivo retorna `path`, `status`, `additions`, `deletions`, `changes`, `pat
 
 O modo padrão é determinístico e auditável. Quando `AI_INSIGHTS_ENABLED=true`, um provedor compatível com chat completions pode enriquecer recomendações; somente agregados são enviados, nunca conteúdo, diff, PAT ou segredo. `analysis_mode` informa o modo realmente utilizado.
 
+Para Gemini, use a camada compatível com OpenAI: `AI_PROVIDER_URL=https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`, a chave em `AI_PROVIDER_API_KEY` e um modelo habilitado em `AI_PROVIDER_MODEL`. No ambiente publicado, essas variáveis devem ser criadas como Application Settings do Azure App Service; não coloque a chave no frontend, no repositório ou em uma mensagem.
+
 `GET /api/v1/commits` aceita `repository_id`, `author`, `since`, `until` e `page`. `GET /api/v1/branches` aceita `repository_id` e `include_deleted=true`. `GET /api/v1/pull-requests` aceita `repository_id`, `state` e `author`.
 
 ## Webhooks, retry e replay
@@ -242,7 +258,7 @@ O cliente GitHub nunca dorme até o reset completo do rate limit. Ele respeita o
 
 ## Dependências externas restantes
 
-1. Módulo 1: equipes/papéis ainda não existem; hoje cada usuário acessa somente os próprios projetos.
+1. Módulo 1: membros, papéis e convites já estão disponíveis. Falta acordar quais permissões do projeto autorizam leitura e escrita dos dados GitHub no Módulo 2; enquanto isso, o isolamento por proprietário permanece intencional.
 2. Plataforma: gateway para origens diferentes e envelope de eventos/Data Bus.
 3. Operação futura: migrar do modo eager atual para Redis + worker Celery quando houver infraestrutura compartilhada; health, readiness, criptografia e conectividade GitHub já estão ativos no App Service.
 4. Consumidores: testes de contrato M2→M3/M4/M5/M6/M7/M8.

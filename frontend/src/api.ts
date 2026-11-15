@@ -269,6 +269,11 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  deletePlatformProject: (projectId: string) =>
+    request<Record<string, never>>(`/api/v1/platform/projects/${encodeURIComponent(projectId)}`, {
+      method: 'DELETE',
+    }),
+
   health: () => request<HealthStatus>('/api/v1/health', undefined, false),
   connectivity: () => request<ConnectivityStatus>('/api/v1/health/github-connectivity', undefined, false),
 

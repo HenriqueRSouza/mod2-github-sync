@@ -73,6 +73,37 @@ def score_commit_message(message: str) -> dict:
     }
 
 
+def _parse_provider_recommendations(content: object) -> list[str]:
+    """Parse a small, bounded recommendation list returned by an AI provider.
+
+    Gemini's OpenAI-compatible endpoint can still wrap an otherwise valid JSON
+    response in a Markdown ``json`` fence.  The API contract requested from the
+    model is JSON, but accepting that harmless presentation wrapper avoids
+    silently discarding a useful response while preserving the same validation
+    and size limits used for plain JSON.
+    """
+    if not isinstance(content, str):
+        raise ValueError("AI provider content must be a string")
+
+    normalized = content.strip()
+    lines = normalized.splitlines()
+    if lines and lines[0].strip().startswith("```"):
+        lines = lines[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        normalized = "\n".join(lines).strip()
+
+    data = json.loads(normalized)
+    if not isinstance(data, dict) or not isinstance(data.get("recommendations", []), list):
+        raise ValueError("AI provider response must contain a recommendations list")
+
+    return [
+        item.strip()[:300]
+        for item in data["recommendations"][:3]
+        if isinstance(item, str) and item.strip()
+    ]
+
+
 def _provider_recommendations(summary: dict) -> tuple[list[str], str]:
     if not settings.AI_INSIGHTS_ENABLED or not settings.AI_PROVIDER_URL:
         return [], "deterministic-v1"
@@ -100,8 +131,7 @@ def _provider_recommendations(summary: dict) -> tuple[list[str], str]:
     )
     response.raise_for_status()
     content = response.json()["choices"][0]["message"]["content"]
-    data = json.loads(content)
-    recommendations = [str(item)[:300] for item in data.get("recommendations", [])[:3]]
+    recommendations = _parse_provider_recommendations(content)
     return recommendations, f"provider:{settings.AI_PROVIDER_MODEL}"
 
 

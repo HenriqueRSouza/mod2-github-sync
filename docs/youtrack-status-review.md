@@ -34,4 +34,4 @@ Os 15 cartões que já estavam em Done permanecem em Done.
 
 ## Login e cadastro
 
-Este serviço não é a fonte de verdade de usuários. O frontend do Módulo 2 já oferece cadastro, login, consulta do usuário e seleção/criação de projetos por um proxy same-origin para o Módulo 1. O Bearer é validado por RS256/JWKS e permanece somente na sessão da aba. Recuperação de conta, equipes, papéis e associação por função continuam pertencendo ao Módulo 1.
+Este serviço não é a fonte de verdade de usuários. O frontend do Módulo 2 já oferece cadastro, login, consulta do usuário e seleção/criação/exclusão segura de projeto vazio por um proxy same-origin para o Módulo 1. O Bearer é validado por RS256/JWKS; com **Lembrar de mim** ele persiste no dispositivo somente até a expiração emitida pelo Módulo 1. Recuperação de conta, equipes, papéis e associação por função continuam pertencendo ao Módulo 1. O M2 ainda aguarda um mapeamento de permissões GitHub por papel antes de abrir seus dados a membros convidados.

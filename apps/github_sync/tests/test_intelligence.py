@@ -80,3 +80,27 @@ def test_optional_provider_receives_only_aggregate_summary(repository, settings)
     payload = post.call_args.kwargs["json"]
     assert "provider-secret" not in str(payload)
     assert "recent_commit_quality" not in str(payload)
+
+
+def test_optional_provider_accepts_markdown_fenced_json(repository, settings):
+    settings.AI_INSIGHTS_ENABLED = True
+    settings.AI_PROVIDER_URL = "https://ai.example/v1/chat/completions"
+    settings.AI_PROVIDER_API_KEY = "provider-secret"
+    settings.AI_PROVIDER_MODEL = "gemini-compatible"
+    response = Mock()
+    response.json.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": "```json\n{\"recommendations\":[\"Revise a distribuicao de revisoes.\"]}\n```"
+                }
+            }
+        ]
+    }
+    response.raise_for_status = Mock()
+
+    with patch("apps.github_sync.services.intelligence.requests.post", return_value=response):
+        result = repository_intelligence(repository)
+
+    assert result["analysis_mode"] == "provider:gemini-compatible"
+    assert "Revise a distribuicao de revisoes." in result["recommendations"]

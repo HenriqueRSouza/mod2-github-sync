@@ -57,6 +57,27 @@ test('authenticated calls carry bearer and repository listing propagates project
   }
 })
 
+test('project deletion uses the Module 2 proxy and preserves an empty 204 response', async () => {
+  const originalFetch = globalThis.fetch
+  let captured: { input?: string; init?: RequestInit } = {}
+  globalThis.fetch = async (input, init) => {
+    captured = { input: String(input), init }
+    return new Response(null, { status: 204 })
+  }
+
+  try {
+    api.setAccessToken('signed-token')
+    const response = await api.deletePlatformProject('46d493f0-40c7-4f92-b13c-330dde429779')
+    assert.equal(captured.input, '/api/v1/platform/projects/46d493f0-40c7-4f92-b13c-330dde429779')
+    assert.equal(captured.init?.method, 'DELETE')
+    assert.equal(new Headers(captured.init?.headers).get('Authorization'), 'Bearer signed-token')
+    assert.equal(response.status, 204)
+  } finally {
+    api.setAccessToken(null)
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('GitHub webhook or sync 401 does not expire the platform session', async () => {
   const originalFetch = globalThis.fetch
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')

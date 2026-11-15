@@ -57,6 +57,7 @@ from .services.platform import (
     PlatformServiceError,
     create_project,
     current_user,
+    delete_project,
     get_project,
     issue_token,
     list_projects,
@@ -64,7 +65,7 @@ from .services.platform import (
 )
 from .services.signatures import is_valid_github_signature
 from .services.sync import sync_repository_from_github
-from .tasks import process_webhook
+from .tasks import process_webhook, queue_module6_notification
 from .throttles import PlatformAuthThrottle
 
 logger = logging.getLogger(__name__)
@@ -137,6 +138,38 @@ def platform_projects(request):
         serializer = PlatformProjectDraftSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return Response(create_project(request.auth, serializer.validated_data), status=status.HTTP_201_CREATED)
+    except PlatformServiceError as exc:
+        return _platform_error_response(exc)
+
+
+@extend_schema(
+    responses={
+        204: None,
+        401: ErrorSerializer,
+        403: ErrorSerializer,
+        404: ErrorSerializer,
+        409: ErrorSerializer,
+        503: ErrorSerializer,
+    },
+)
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def platform_project_detail(request, project_id):
+    """Delete only an empty shared project through Module 1.
+
+    Module 1 intentionally does not cascade into other modules.  Blocking the
+    request while M2 still has active repository links avoids leaving indexed
+    GitHub data orphaned under a deleted ``project_id``.
+    """
+    if Repository.objects.filter(project_id=project_id, active=True).exists():
+        return _error_response(
+            "project_has_github_links",
+            "Desvincule os repositórios do GitHub Sync antes de excluir este projeto.",
+            status.HTTP_409_CONFLICT,
+        )
+    try:
+        delete_project(request.auth, project_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
     except PlatformServiceError as exc:
         return _platform_error_response(exc)
 
@@ -472,11 +505,27 @@ def repository_sync(request, pk):
         )
     except Exception:
         logger.exception("repository_sync_failed", extra={"repository_id": repository.pk})
+        queue_module6_notification(
+            repository.pk,
+            event_id=f"m2-sync-failed-{repository.pk}-{uuid.uuid4()}",
+            notification_type="github.sync.failed",
+            title="Falha na sincronização com GitHub",
+            body=f"A sincronização do repositório {repository} falhou. Consulte o GitHub Sync para tentar novamente.",
+            priority="high",
+        )
         return _error_response(
             "repository_sync_failed",
             "A sincronização falhou. Tente novamente mais tarde.",
             status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+    queue_module6_notification(
+        repository.pk,
+        event_id=f"m2-sync-completed-{repository.pk}-{uuid.uuid4()}",
+        notification_type="github.sync.completed",
+        title="Sincronização com GitHub concluída",
+        body=f"{commits_count} commit(s) foram sincronizados no repositório {repository}.",
+        priority="medium",
+    )
     return Response({
         "status": "synced",
         "repository": str(repository),

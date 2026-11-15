@@ -143,6 +143,53 @@ def test_repository_creation_rejects_project_owned_by_another_user(client, setti
     assert response.json()["code"] == "project_access_denied"
 
 
+def test_project_deletion_forwards_to_module1_only_without_m2_repository_links(client, settings, signing_key):
+    _enable_auth(settings)
+    owner = uuid4()
+    project_id = uuid4()
+    bearer = _token(signing_key, owner)
+
+    with (
+        patch("apps.github_sync.authentication._jwks_client", return_value=_fake_jwks(signing_key)),
+        patch("apps.github_sync.views.delete_project") as delete_project,
+    ):
+        response = client.delete(
+            reverse("platform-project-detail", kwargs={"project_id": project_id}),
+            HTTP_AUTHORIZATION=f"Bearer {bearer}",
+        )
+
+    assert response.status_code == 204
+    delete_project.assert_called_once_with(bearer, project_id)
+
+
+def test_project_deletion_preserves_m2_repository_links(client, settings, signing_key):
+    _enable_auth(settings)
+    owner = uuid4()
+    project_id = uuid4()
+    bearer = _token(signing_key, owner)
+    Repository.objects.create(
+        project_id=project_id,
+        platform_user_id=owner,
+        github_id=8203,
+        owner="team",
+        name="linked",
+        webhook_secret=b"secret",
+    )
+
+    with (
+        patch("apps.github_sync.authentication._jwks_client", return_value=_fake_jwks(signing_key)),
+        patch("apps.github_sync.views.delete_project") as delete_project,
+    ):
+        response = client.delete(
+            reverse("platform-project-detail", kwargs={"project_id": project_id}),
+            HTTP_AUTHORIZATION=f"Bearer {bearer}",
+        )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "project_has_github_links"
+    delete_project.assert_not_called()
+
+
 def test_public_platform_auth_proxy_is_rate_limited(client, settings):
     cache.clear()
     settings.REST_FRAMEWORK = {

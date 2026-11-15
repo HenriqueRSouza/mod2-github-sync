@@ -10,7 +10,7 @@ O Módulo 2 é a fonte de fatos do GitHub: autentica conexão, recebe webhooks, 
 | M2 → M3 Artefatos | commits, branches, PRs, conteúdo UTF-8 sob demanda, SHA/ref/URL | taxonomia e persistência de artefatos no M3 |
 | M2 → M4 Code Review | commits, PRs, arquivos e patches limitados com proveniência | identidade do revisor e resultado da avaliação |
 | M2 → M5 Curadoria | caminho, conteúdo, autoria, recência e referência imutável | classificação e política de curadoria |
-| M2 → M6 Dashboard | métricas, insights, entregas, falhas e timestamps | identidade/projeto e atualização por Data Bus em vez de polling |
+| M2 → M6 Central de Notificações | notificações assíncronas de sync concluído/falho e falha definitiva de webhook, com `project_id` quando existente | chave de integração configurada no backend e E2E conjunto; métricas detalhadas continuam nas APIs M2 |
 | M2 → M7 RAG/Chat | conteúdo/diff, commits, PRs, links e proveniência | chunking, embeddings, ACL institucional e respostas do RAG |
 | M2 → M8 Relatórios | frequência, clareza, padrões, gargalos e métricas por período/repositório | contexto de projeto/equipe e DTO executivo compartilhado |
 
@@ -20,7 +20,7 @@ O documento formal do curso descreve oito módulos; o material do laboratório a
 
 - descoberta: `GET /api/schema/`, `GET /docs/`;
 - operação: `GET /api/v1/health`, `/health/readiness`, `/health/github-connectivity`;
-- identidade/projetos: `POST /api/v1/platform/auth/register`, `/auth/token`, `GET /auth/me`, `GET|POST /platform/projects`;
+- identidade/projetos: `POST /api/v1/platform/auth/register`, `/auth/token`, `GET /auth/me`, `GET|POST /platform/projects`, `DELETE /platform/projects/{project_id}`;
 - conexão: `POST /api/v1/github/handshake`, `GET|POST /api/v1/repositories`, `DELETE /api/v1/repositories/{id}` (somente integração M2) e `POST /repositories/{id}/sync`;
 - fatos: `GET /commits`, `/branches`, `/pull-requests`, `/webhooks/deliveries`;
 - consumidores: `POST /repositories/{id}/contents`, `POST /repositories/{id}/commits/{sha}/diff`;
@@ -35,6 +35,7 @@ O contrato detalhado, payloads, segurança e limites estão em [integration-guid
 - Conteúdo e diff possuem limites, proveniência e PAT efêmero.
 - Analytics/insights possuem baseline determinístico; IA externa é opt-in e recebe somente agregados.
 - Webhook possui HMAC, idempotência, retry transitório, falha persistida e replay.
+- Central M6 recebe projeção opt-in de eventos operacionais, sem PAT, segredo, payload ou diffs.
 - Segredo possui criptografia, versão, expiração, rotação e auditoria.
 - Frontend não inventa dados: mostra estados reais ou “em desenvolvimento”.
 - Login/cadastro e projetos usam o Módulo 1 por proxy same-origin; Bearer expira em 30 minutos e não é persistido fora da aba.

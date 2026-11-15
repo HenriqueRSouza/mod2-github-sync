@@ -154,6 +154,13 @@ AI_PROVIDER_API_KEY = os.getenv("AI_PROVIDER_API_KEY", "")
 AI_PROVIDER_MODEL = os.getenv("AI_PROVIDER_MODEL", "configured-model")
 AI_PROVIDER_TIMEOUT = int(os.getenv("AI_PROVIDER_TIMEOUT", "15"))
 
+# Central de Notificações do Módulo 6. O envio é opt-in e assíncrono: sem
+# endpoint, chave ou flag explícita, o GitHub Sync continua independente.
+MODULE6_NOTIFICATIONS_ENABLED = os.getenv("MODULE6_NOTIFICATIONS_ENABLED", "false").lower() == "true"
+MODULE6_NOTIFICATIONS_URL = os.getenv("MODULE6_NOTIFICATIONS_URL", "")
+MODULE6_INTEGRATION_KEY = os.getenv("MODULE6_INTEGRATION_KEY", "")
+MODULE6_NOTIFICATIONS_TIMEOUT = int(os.getenv("MODULE6_NOTIFICATIONS_TIMEOUT", "5"))
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

@@ -21,7 +21,7 @@ export const ProjectHub: React.FC<ProjectHubProps> = ({ projects, isRefreshing =
       <div>
         <span className="project-hub-eyebrow">CONTEXTO DA PLATAFORMA</span>
         <h2 id="project-hub-title">Escolha um projeto para continuar</h2>
-        <p>O projeto define quais repositórios, webhooks e indicadores serão exibidos no módulo. A criação e a exclusão do projeto compartilhado são responsabilidades do Módulo 1; aqui você administra somente as integrações GitHub Sync. {isRefreshing ? 'Atualizando a lista em segundo plano…' : ''}</p>
+        <p>O projeto define quais repositórios, webhooks e indicadores serão exibidos no módulo. A criação e a exclusão segura do projeto usam o contrato do Módulo 1; aqui você administra as integrações GitHub Sync. {isRefreshing ? 'Atualizando a lista em segundo plano…' : ''}</p>
       </div>
       <button type="button" className="btn-module btn-module-primary" onClick={onCreateProject}>
         <FolderPlus size={15} /> Criar projeto

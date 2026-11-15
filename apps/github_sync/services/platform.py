@@ -63,5 +63,16 @@ def create_project(token: str, payload: dict):
     return _request("POST", f"{settings.MODULE1_PROJECTS_BASE_URL}/projects", token=token, json=payload)
 
 
+def delete_project(token: str, project_id):
+    """Delete an empty platform project through the Module 1 contract.
+
+    The caller is deliberately responsible for ensuring there are no M2
+    repository links first.  The Module 1 endpoint returns 204 without a body.
+    ``_request`` already tolerates a response without JSON and preserves all
+    non-success statuses for the API boundary.
+    """
+    return _request("DELETE", f"{settings.MODULE1_PROJECTS_BASE_URL}/projects/{project_id}", token=token)
+
+
 def get_project(token: str, project_id):
     return _request("GET", f"{settings.MODULE1_PROJECTS_BASE_URL}/projects/{project_id}", token=token)

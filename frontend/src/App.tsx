@@ -14,6 +14,7 @@ import { LandingPage } from './components/LandingPage'
 import { PlatformAccess } from './components/PlatformAccess'
 import { CreateProjectModal } from './components/CreateProjectModal'
 import { DisconnectRepositoryModal } from './components/DisconnectRepositoryModal'
+import { DeleteProjectModal } from './components/DeleteProjectModal'
 import { ProjectHub } from './components/ProjectHub'
 import { buildWorkspaceUrl, parseWorkspaceState } from './workspaceState'
 import {
@@ -87,6 +88,9 @@ export default function App() {
   const [createProjectModalOpen, setCreateProjectModalOpen] = useState(false)
   const [disconnectRepository, setDisconnectRepository] = useState<Repository | null>(null)
   const [disconnectingRepository, setDisconnectingRepository] = useState(false)
+  const [deleteProject, setDeleteProject] = useState<PlatformProject | null>(null)
+  const [deletingProject, setDeletingProject] = useState(false)
+  const [deleteProjectError, setDeleteProjectError] = useState<string | null>(null)
   const [platformSession, setPlatformSession] = useState<PlatformSession | null>(() => readPlatformSession())
   const [sessionChecking, setSessionChecking] = useState(false)
   const [accessNotice, setAccessNotice] = useState<string | null>(null)
@@ -397,6 +401,33 @@ export default function App() {
     }
   }
 
+  const handleDeleteProject = async () => {
+    if (!deleteProject) return
+    setDeletingProject(true)
+    setDeleteProjectError(null)
+    try {
+      const { status, data } = await api.deletePlatformProject(deleteProject.id)
+      if (status !== 204) {
+        const detail = (data as { detail?: string } | undefined)?.detail
+        throw new Error(detail || 'Não foi possível excluir o projeto agora.')
+      }
+      const removedId = deleteProject.id
+      setProjects((current) => {
+        const updated = current.filter((project) => project.id !== removedId)
+        if (platformSession) savePlatformProjectsCache(platformSession.user.id, updated)
+        return updated
+      })
+      if (selectedProject?.id === removedId) handleSelectProject(null)
+      setDeleteProject(null)
+      setSyncFeedback('Projeto excluído da plataforma. Repositórios remotos e dados de outros módulos foram preservados.')
+      window.setTimeout(() => setSyncFeedback(null), 5000)
+    } catch (error) {
+      setDeleteProjectError(error instanceof Error ? error.message : 'Não foi possível excluir o projeto agora.')
+    } finally {
+      setDeletingProject(false)
+    }
+  }
+
   if (viewMode === 'landing') {
     return <><LandingPage onEnterWorkspace={handleSwitchToWorkspace} />{themeControl}</>
   }
@@ -518,8 +549,12 @@ export default function App() {
             commits={commits}
             connectivity={connectivity}
             flow={flow}
+            deliveries={deliveries}
             onSyncNow={handleSyncNow}
             syncing={syncing}
+            onConnectRepository={() => setConnectModalOpen(true)}
+            onOpenWebhooks={() => setActiveTab('webhooks')}
+            onOpenAnalytics={() => setActiveTab('analytics')}
           />
         )}
 
@@ -528,6 +563,10 @@ export default function App() {
             repository={selectedRepo}
             project={selectedProject}
             onRequestUnlinkRepository={() => selectedRepo && setDisconnectRepository(selectedRepo)}
+            onRequestDeleteProject={() => {
+              setDeleteProjectError(null)
+              setDeleteProject(selectedProject)
+            }}
             onTokenValidated={(token) => {
               if (selectedRepo) setRepositoryTokens((current) => ({ ...current, [selectedRepo.id]: token }))
             }}
@@ -600,6 +639,14 @@ export default function App() {
         loading={disconnectingRepository}
         onCancel={() => { if (!disconnectingRepository) setDisconnectRepository(null) }}
         onConfirm={() => void handleDisconnectRepository()}
+      />
+      <DeleteProjectModal
+        project={deleteProject}
+        linkedRepositories={deleteProject ? repositories.filter((repository) => repository.project_id === deleteProject.id).length : 0}
+        loading={deletingProject}
+        error={deleteProjectError}
+        onCancel={() => { if (!deletingProject) setDeleteProject(null) }}
+        onConfirm={() => void handleDeleteProject()}
       />
     </div>
   )
